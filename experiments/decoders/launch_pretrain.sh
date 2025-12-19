@@ -70,4 +70,5 @@ uv run torchrun --standalone --nproc_per_node=1 \
     --overrides \
     $overrides \
     name="${name}" \
+    notes="${notes}" \
     output_dir="${OUT_DIR}"

@@ -1,6 +1,8 @@
 # intermediate temporal patch size for fun
 t_patch_size: 4
 
+masking: tube
+
 model_kwargs:
   # will override this
   decoding: attn

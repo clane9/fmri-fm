@@ -459,11 +459,13 @@ def make_plots(
         img_mask = img_mask.expand_as(images)
 
     plots = {}
+    # nb, we omit the pred_mask so we can visualize the full prediction, not just what
+    # contributes to the loss. this is mostly for when pred_edge_pad > 0, so we can
+    # still see the edge prediction.
     mask_pred_fig = vis.plot_mask_pred(
         target=images,
         pred=state["pred_images"],
         visible_mask=state["visible_mask"],
-        pred_mask=state["pred_mask"],
         img_mask=img_mask,
         **ut.filter_kwargs(vis.plot_mask_pred, fig_kwargs),
     )

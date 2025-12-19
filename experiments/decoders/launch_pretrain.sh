@@ -37,12 +37,14 @@ keys=(
     cross_reg-4
     crossreg_reg-1
     crossreg_reg-4
+    crossreg_reg-16
 )
 decodings=(
     attn
     attn
     cross
     cross
+    crossreg
     crossreg
     crossreg
 )
@@ -53,6 +55,7 @@ regs=(
     4
     1
     4
+    16
 )
 key=${keys[JOBID]}
 decoding=${decodings[JOBID]}

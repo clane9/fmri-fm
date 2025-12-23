@@ -33,21 +33,29 @@ ln -sn ${SHARE_OUT_DIR} ${OUT_DIR} 2>/dev/null
 keys=(
     attn_pep-4
     cross_pep-4
+    crossreg_reg-4_pep-4
 )
 decodings=(
     attn
     cross
+    crossreg
+)
+regs=(
+    1
+    1
+    4
 )
 key=${keys[JOBID]}
 decoding=${decodings[JOBID]}
+reg=${regs[JOBID]}
 # prediction edge padding to prevent interpolation across patch edge
 pep=4
 
 name="${EXP_NAME}/${key}/pretrain"
 config="${EXP_DIR}/config/pretrain.yaml"
 
-notes="decoding ablation test (decoding=${decoding}, pred_edge_pad=${pep})"
-overrides="model_kwargs.decoding=${decoding} model_kwargs.pred_edge_pad=${pep}"
+notes="decoding ablation test (decoding=${decoding}, reg_tokens=${reg}, pred_edge_pad=${pep})"
+overrides="model_kwargs.decoding=${decoding} model_kwargs.reg_tokens=${reg} model_kwargs.pred_edge_pad=${pep}"
 
 uv run torchrun --standalone --nproc_per_node=1 \
     src/flat_mae/main_pretrain.py \

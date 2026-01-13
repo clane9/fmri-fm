@@ -259,7 +259,7 @@ def create_data_loaders(args: DictConfig):
     # TODO: why do we need to do this again?
     if args.masking:
         # decouple mask patch size from model patch size, pixio style
-        mask_patch_size = args.get("mask_patch_size", args.patch_size)
+        mask_patch_size = args.get("mask_patch_size") or args.patch_size
         mask_fn = masking.create_masking(
             args.masking,
             mask_ratio=args.mask_ratio,

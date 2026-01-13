@@ -435,6 +435,7 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
         t_pred_stride: int = 1,
         pred_edge_pad: int = 0,
         no_decode_pos: bool = False,
+        head_init_scale: float | None = None,
         pos_embed: Literal["abs", "sep", "sincos"] = "abs",
         decoding: Literal["attn", "cross", "crossreg"] = "attn",
         target_norm: Literal["none", "global", "frame", "patch"] | None = None,
@@ -455,6 +456,7 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
         self.t_pred_stride = t_pred_stride  # predict subset of temporal frames
         self.pred_edge_pad = pred_edge_pad  # don't predict edges of visible patches
         self.no_decode_pos = no_decode_pos  # don't pos encode embeddings in decoder
+        self.head_init_scale = head_init_scale  # override head init weight scale
 
         # patchify reshapes input into sequence of flattened patches, shape [B, N, P]
         ndim = len(img_size)
@@ -550,6 +552,8 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
 
     def init_weights(self):
         self.apply(_init_weights)
+        if self.head_init_scale is not None:
+            self.decoder.head.weight.data.mul_(self.head_init_scale)
 
     def prepare_masks(
         self,

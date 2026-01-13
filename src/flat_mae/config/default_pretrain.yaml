@@ -97,6 +97,9 @@ model_kwargs:
   # don't add position to cls and reg tokens
   no_embed_class: false
 
+  # scale factor for decoder head init
+  head_init_scale: null
+
   decoder_depth: 4
   drop_path_rate: 0.0
 

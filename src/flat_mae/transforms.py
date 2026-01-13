@@ -7,11 +7,15 @@ import torchvision.tv_tensors as tvt
 import torch.nn.functional as F
 import nibabel as nib
 import numpy as np
+import neuromaps.transforms
 
-import fmri_fm_eval.nisc as nisc
+import flat_mae.nisc as nisc
 
 # TODO:
 #   - pca noising, ie pink noise
+
+# shared flat map resampler
+_FLAT_RESAMPLER = nisc.flat_resampler_fslr64k_224_560()
 
 
 class ToTensor:
@@ -104,8 +108,7 @@ class FlatUnmask:
     dim = 77763
 
     def __init__(self):
-        resampler = nisc.flat_resampler_fslr64k_224_560()
-        self.mask = torch.as_tensor(resampler.mask_)
+        self.mask = torch.as_tensor(_FLAT_RESAMPLER.mask_)
 
     def __call__(self, sample: dict) -> dict:
         bold = sample["bold"]
@@ -121,9 +124,13 @@ class FlatUnmask:
         return f"{self.__class__.__name__}({tuple(self.mask.shape)})"
 
 
-class ParcelUnmask:
-    def __init__(self, dim: int):
-        self.dim = dim
+class Schaefer400Unmask:
+    dim = 400
+
+    def __init__(self):
+        parc_path = nisc.fetch_schaefer(400, space="fslr64k")
+        parc = nisc.read_cifti_surf_data(parc_path).squeeze(0)
+        self.parc = torch.as_tensor(parc, dtype=torch.int64)
 
     def __call__(self, sample: dict) -> dict:
         bold = sample["bold"]
@@ -132,6 +139,23 @@ class ParcelUnmask:
         bold = bold[None, :, :, None]  # [1, T, D, 1]
         mask = torch.ones(D, 1, dtype=torch.bool)  # [D, 1] spatial mask only
         return {**sample, "bold": bold, "mask": mask}
+
+    def to_flat(self, bold: torch.Tensor) -> torch.Tensor:
+        # map parcellated values to flat map for visualization
+        # patches [N, P] -> vector [D]
+        *shape, D, _ = bold.shape
+        assert D == self.dim, f"input dim {D} doesn't match expected {self.dim}"
+        bold = bold.squeeze(-1)
+        # vector [D] -> surface [V]
+        (V,) = self.parc.shape
+        # parcellation codes 0 as background and 1-indexed rois
+        parc_mask = self.parc > 0
+        parc_ids = self.parc - 1
+        bold = bold[..., parc_ids] * parc_mask
+        # surface [V] -> flat [H, W]
+        bold = _FLAT_RESAMPLER.transform(bold.numpy(), interpolation="nearest")
+        bold = torch.as_tensor(bold)
+        return bold
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.dim})"
@@ -150,9 +174,9 @@ class MNICortexUnmask:
         self.threshold = threshold
 
         # load cortex mask from schaefer400 parcellation
-        roi_path = nisc.fetch_schaefer(400, space="mni")
-        img = nib.load(roi_path)
-        mask = np.ascontiguousarray(img.get_fdata().T) > 0  # (D, H, W)
+        mask_path = nisc.fetch_schaefer(400, space="mni")
+        mask_img = nib.load(mask_path)
+        mask = np.ascontiguousarray(mask_img.get_fdata().T) > 0  # (D, H, W)
         assert mask.sum() == self.dim
 
         # gather_ids: (N, P) array of indices in [0, D) into the original data
@@ -161,6 +185,8 @@ class MNICortexUnmask:
             mask, patch_size=patch_size, threshold=threshold
         )
 
+        self.mask_img: nib.Nifti1Image = mask_img
+        self.mask = torch.as_tensor(mask)
         self.gather_ids = torch.as_tensor(gather_ids)
         self.patch_mask = torch.as_tensor(patch_mask)
         self.num_patches, self.patch_dim = self.patch_mask.shape
@@ -177,17 +203,47 @@ class MNICortexUnmask:
         return {**sample, "bold": bold, "mask": self.patch_mask}
 
     def transform(self, bold: torch.Tensor) -> torch.Tensor:
-        T, D = bold.shape
+        *shape, D = bold.shape
         assert D == self.dim, f"input dim {D} doesn't match expected {self.dim}"
 
-        bold = bold[:, self.gather_ids] * self.patch_mask  # (T, N, P)
+        bold = bold[..., self.gather_ids] * self.patch_mask  # (T, N, P)
         return bold
 
     def inverse(self, bold: torch.Tensor) -> torch.Tensor:
-        T, N, P = bold.shape
-        bold_ = torch.zeros(T, self.dim, dtype=bold.dtype, device=bold.device)
-        bold_[:, self.restore_mask] = bold[:, self.patch_mask][:, self.restore_ids]
-        return bold_
+        *shape, N, P = bold.shape
+        values = bold[..., self.patch_mask]
+        values = values[..., self.restore_ids]
+        # nb, we assume we're on cpu with no grad
+        bold = torch.zeros((*shape, self.dim), dtype=bold.dtype)
+        bold[..., self.restore_mask] = values
+        return bold
+
+    def to_flat(self, bold: torch.Tensor) -> torch.Tensor:
+        # map patchified cortex values to flat map for visualization
+        # patches [N, P] -> vector [D]
+        bold = self.inverse(bold)
+        *shape, D = bold.shape
+        bold = bold.reshape(-1, D)
+        N, _ = bold.shape
+        # vector [D] -> volume [Z, Y, X]
+        bold_ = torch.zeros((N, *self.mask.shape), dtype=bold.dtype)
+        bold_[:, self.mask] = bold
+        bold = bold_
+        # volume [Z, Y, X] -> surface [V] with neuromaps
+        bold_img = nib.Nifti1Image(bold.numpy().T, affine=self.mask_img.affine)
+        bold_lh, bold_rh = neuromaps.transforms.mni152_to_fslr(bold_img)
+        bold = np.stack(
+            [
+                np.concatenate([row_lh.data, row_rh.data])
+                for row_lh, row_rh in zip(bold_lh.darrays, bold_rh.darrays)
+            ]
+        )
+        # surface [V] -> flat [H, W]
+        bold = _FLAT_RESAMPLER.transform(bold, interpolation="nearest")
+        _, H, W = bold.shape
+        bold = bold.reshape((*shape, H, W))
+        bold = torch.as_tensor(bold)
+        return bold
 
     def __repr__(self):
         s = (
@@ -362,7 +418,7 @@ class Transform:
 
         unmask_cls = {
             "flat": FlatUnmask,
-            "schaefer400": ParcelUnmask,
+            "schaefer400": Schaefer400Unmask,
             "mni_cortex": MNICortexUnmask,
         }[space]
         transforms.append(unmask_cls())

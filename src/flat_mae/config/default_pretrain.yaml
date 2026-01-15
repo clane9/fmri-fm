@@ -211,6 +211,9 @@ start_epoch: 0
 max_checkpoints: 0
 checkpoint_period: null
 
+# how often to save plots
+plot_period: 1
+
 device: cuda
 # presend data to cuda asynchronously
 presend_cuda: false

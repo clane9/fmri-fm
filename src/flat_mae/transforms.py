@@ -386,14 +386,15 @@ class GrayJitter:
 
 class GaussianJitter:
     def __init__(self, std: float = 1.0):
+        assert std <= 1.0, f"invalid std {std}; expected in [0, 1]"
         self.std = std
 
     def __call__(self, sample):
         bold = sample["bold"]
         mask = sample["mask"]
         if self.std > 0:
-            std = random.uniform(0, self.std)
-            bold = bold + std * torch.randn_like(bold)
+            t = random.uniform(0, self.std)
+            bold = (1 - t) * bold + t * torch.randn_like(bold)
             bold = bold * mask
         return {**sample, "bold": bold}
 

@@ -3,6 +3,7 @@ import torch
 from torch import Tensor
 from torch.utils.data import default_collate
 
+pytest.importorskip("fmri_fm_eval.models.registry")
 from fmri_fm_eval.models.registry import create_model, import_model_plugins
 import fmri_fm_eval.readers as readers
 

@@ -230,7 +230,7 @@ def main(args: DictConfig):
 
 
 def create_data_loaders(args: DictConfig):
-    train_transform = transforms.Transform(
+    train_transform = transforms.make_transform(
         space=args.input_space,
         num_frames=args.num_frames,
         normalize=args.normalize,
@@ -239,9 +239,8 @@ def create_data_loaders(args: DictConfig):
         crop_scale=args.get("crop_scale"),
         crop_aspect=args.get("crop_aspect"),
         gray_jitter=args.get("gray_jitter"),
-        gauss_sigma=args.get("gauss_sigma"),
     )
-    val_transform = transforms.Transform(
+    val_transform = transforms.make_transform(
         space=args.input_space,
         num_frames=args.num_frames,
         normalize=args.normalize,
@@ -409,9 +408,7 @@ def train_one_epoch(
             ut.update_lr(optimizer.param_groups, lr)
 
         images = batch["bold"]  # note, this key changed "image" -> "bold"
-
         img_mask = batch["mask"]  # note, this key changed "img_mask" -> "mask"
-        targets = batch.get("bold_clean")
         visible_mask = batch.get("visible_mask")
 
         # visible mask overrides default random masking
@@ -420,7 +417,6 @@ def train_one_epoch(
         with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=args.amp):
             loss = model(
                 images,
-                targets=targets,
                 img_mask=img_mask,
                 visible_mask=visible_mask,
                 mask_ratio=mask_ratio,
@@ -498,13 +494,11 @@ def evaluate(
 
         images = batch["bold"]
         img_mask = batch["mask"]
-        targets = batch.get("bold_clean")
         visible_mask = batch.get("visible_mask")
 
         with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=args.amp):
             loss, state = model(
                 images,
-                targets=targets,
                 mask_ratio=args.mask_ratio,
                 pred_mask_ratio=args.pred_mask_ratio,
                 img_mask=img_mask,

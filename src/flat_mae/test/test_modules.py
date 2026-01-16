@@ -10,6 +10,7 @@ from flat_mae.modules import (
     SeparablePosEmbed,
     SinCosPosEmbed2D,
     SinCosPosEmbed3D,
+    GaussianNoise,
     masked_normalize,
     normalize,
 )
@@ -140,3 +141,13 @@ def test_masked_normalize_equivalence():
     x_norm, mean_norm, std_norm = normalize(x, dim=-1)
 
     assert torch.allclose(x_masked, x_norm, atol=1e-5)
+
+
+def test_gaussian_noise():
+    B, N, D = 2, 10, 8
+    x = torch.randn(B, N, D)
+    mask = torch.ones(B, N, D)
+    input_noise = GaussianNoise(0.5)
+    x_ = input_noise(x, mask)
+    assert x.shape == x_.shape
+    assert not torch.allclose(x, x_)

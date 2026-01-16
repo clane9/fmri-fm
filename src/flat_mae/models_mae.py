@@ -37,6 +37,7 @@ from .modules import (
     SinCosPosEmbed2D,
     SinCosPosEmbed3D,
     Normalize,
+    GaussianNoise,
 )
 from .masking import trim_patch_mask, pad_image_mask
 from .utils import filter_kwargs
@@ -435,6 +436,7 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
         pos_embed: Literal["abs", "sep", "sincos"] = "abs",
         decoding: Literal["attn", "cross", "crossreg"] = "attn",
         target_norm: Literal["none", "global", "frame", "patch"] | None = None,
+        gauss_sigma: float | None = None,
     ):
         super().__init__()
         if isinstance(img_size, int):
@@ -537,6 +539,12 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
             self.target_norm = Normalize(self.pred_patchify.grid_size, dim=norm_dim)
         else:
             self.target_norm = None
+
+        # input noise applied during training
+        if gauss_sigma is not None and gauss_sigma > 0:
+            self.input_noise = GaussianNoise(sigma=gauss_sigma)
+        else:
+            self.input_noise = None
 
         self.init_weights()
 
@@ -717,6 +725,8 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
     ) -> Tensor | tuple[Tensor, dict[str, Tensor]]:
         if targets is None:
             targets = images
+        if self.input_noise is not None:
+            images = self.input_noise(images, img_mask)
         img_mask, visible_mask, pred_mask = self.prepare_masks(
             img_mask, visible_mask, pred_mask, shape=images.shape, dtype=images.dtype
         )
@@ -746,6 +756,8 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
         )
 
         state = {
+            "images": images,
+            "targets": targets,
             "targets_patches": targets_patches,
             "targets_stats": targets_stats,
             "patch_embeds": patch_embeds,

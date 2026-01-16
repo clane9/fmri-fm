@@ -569,3 +569,29 @@ def normalize(
     std = (var + eps) ** 0.5
     x = (x - mean) / std
     return x, mean, std
+
+
+class GaussianNoise(nn.Module):
+    """
+    basic gaussian noising module. mixes input with gaussian noise
+    x = (1 - t) * x + t * z
+    with t ~ [0, sigma]
+    """
+
+    def __init__(self, sigma: float = 0.5):
+        super().__init__()
+        assert 0 <= sigma <= 1, f"invalid sigma {sigma}; expected in [0, 1]"
+        self.sigma = sigma
+
+    def forward(self, x: Tensor, mask: Tensor | None = None) -> Tensor:
+        B, *shape = x.shape
+        if not self.training or self.sigma <= 0:
+            return x
+        t = torch.rand((B,) + len(shape) * (1,), dtype=x.dtype, device=x.device) * self.sigma
+        x = (1 - t) * x + t * torch.randn_like(x)
+        if mask is not None:
+            x = x * mask
+        return x
+
+    def extra_repr(self):
+        return f"sigma={self.sigma}"

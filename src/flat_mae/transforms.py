@@ -384,85 +384,40 @@ class GrayJitter:
         return f"{c}(brightness={self.brightness}, contrast={self.contrast})"
 
 
-class GaussianJitter:
-    def __init__(self, std: float = 1.0):
-        assert std <= 1.0, f"invalid std {std}; expected in [0, 1]"
-        self.std = std
+def make_transform(
+    space: Literal["flat", "schaefer400", "mni_cortex"] = "flat",
+    num_frames: int = 16,
+    normalize: Literal["global", "frame"] | None = None,
+    clip_vmax: float | None = 3.0,
+    tr_scale: float | None = None,
+    crop_scale: float | None = None,
+    crop_aspect: float | None = None,
+    gray_jitter: float | None = None,
+) -> v2.Compose:
+    assert crop_scale is None or space == "flat", "crop only supported for flat maps"
 
-    def __call__(self, sample):
-        bold = sample["bold"]
-        mask = sample["mask"]
-        if self.std > 0:
-            t = random.uniform(0, self.std)
-            bold = (1 - t) * bold + t * torch.randn_like(bold)
-            bold = bold * mask
-        return {**sample, "bold": bold}
+    transforms = [ToTensor()]
 
-    def __repr__(self):
-        c = self.__class__.__name__
-        return f"{c}({self.std})"
+    if tr_scale and tr_scale < 1:
+        transforms.append(TemporalRandomResizedCrop(scale=tr_scale, num_frames=num_frames))
+    else:
+        transforms.append(TemporalCenterCrop(num_frames=num_frames))
 
+    if normalize:
+        transforms.append(Normalize(normalize))
+    if clip_vmax and clip_vmax > 0:
+        transforms.append(Clip(clip_vmax))
 
-class Transform:
-    def __init__(
-        self,
-        space: Literal["flat", "schaefer400", "mni_cortex"] = "flat",
-        num_frames: int = 16,
-        normalize: Literal["global", "frame"] | None = None,
-        clip_vmax: float | None = 3.0,
-        tr_scale: float | None = None,
-        crop_scale: float | None = None,
-        crop_aspect: float | None = None,
-        gray_jitter: float | None = None,
-        gauss_sigma: float | None = None,
-    ):
-        assert crop_scale is None or space == "flat", "crop only supported for flat maps"
+    unmask = get_unmask(space)
+    transforms.append(unmask)
 
-        transforms = [ToTensor()]
+    if crop_scale and crop_scale < 1:
+        transforms.append(FlatRandomResizedCrop(crop_scale, crop_aspect or 1.0))
 
-        if tr_scale and tr_scale < 1:
-            transforms.append(TemporalRandomResizedCrop(scale=tr_scale, num_frames=num_frames))
-        else:
-            transforms.append(TemporalCenterCrop(num_frames=num_frames))
+    if gray_jitter and gray_jitter > 0:
+        transforms.append(GrayJitter(gray_jitter, gray_jitter))
 
-        if normalize:
-            transforms.append(Normalize(normalize))
-        if clip_vmax and clip_vmax > 0:
-            transforms.append(Clip(clip_vmax))
-
-        unmask = get_unmask(space)
-        transforms.append(unmask)
-
-        if crop_scale and crop_scale < 1:
-            transforms.append(FlatRandomResizedCrop(crop_scale, crop_aspect or 1.0))
-
-        if gray_jitter and gray_jitter > 0:
-            transforms.append(GrayJitter(gray_jitter, gray_jitter))
-
-        # extra noise transforms applied only to input images, not targets
-        noise_transforms = []
-        if gauss_sigma and gauss_sigma > 0:
-            noise_transforms.append(GaussianJitter(gauss_sigma))
-
-        self.transform = v2.Compose(transforms)
-
-        if noise_transforms:
-            self.noise_transform = v2.Compose(noise_transforms)
-        else:
-            self.noise_transform = None
-
-    def __call__(self, sample):
-        sample = self.transform(sample)
-        if self.noise_transform is not None:
-            sample["bold_clean"] = sample["bold"]
-            sample = self.noise_transform(sample)
-        return sample
-
-    def __repr__(self):
-        c = self.__class__.__name__
-        s = f"transform={self.transform},\nnoise_transform={self.noise_transform}"
-        s = f"{c}(\n{s}\n)"
-        return s
+    return v2.Compose(transforms)
 
 
 @cache

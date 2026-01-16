@@ -92,6 +92,11 @@ model_kwargs:
   # across patch edges
   pred_edge_pad: 0
 
+  # input gaussian noise sigma (applied during training only)
+  # mixes input with noise: (1-t)*x + t*z where t ~ [0, sigma]
+  # targets stay clean
+  gauss_sigma: null
+
   class_token: true
   reg_tokens: 0
   # don't add position to cls and reg tokens
@@ -171,9 +176,6 @@ crop_aspect: null
 
 # grayscale brightness contrast jitter
 gray_jitter: null
-
-# gaussian noise
-gauss_sigma: null
 
 # Data loader
 num_workers: 16

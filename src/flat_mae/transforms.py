@@ -64,7 +64,7 @@ class TemporalRandomResizedCrop:
         T, D = bold.shape
         min_t = round(self.num_frames * self.scale)
         max_t = round(self.num_frames / self.scale)
-        assert min_t <= T <= max_t, (
+        assert T >= max_t, (
             f"invalid clip length {T} for temporal scale {self.scale} and num frames {self.num_frames}"
         )
 

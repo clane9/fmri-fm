@@ -178,10 +178,12 @@ def main(args: DictConfig):
         loss_scaler = None
 
     # load checkpoint/resume training
-    ut.load_model(args, model_without_ddp, optimizer, loss_scaler)
+    best_loss = ut.load_model(args, model_without_ddp, optimizer, loss_scaler)
+    is_best = False
 
     print(f"start training for {args.epochs} epochs")
     start_time = time.monotonic()
+    val_name = args.get("val_dataset")
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed and hasattr(train_loader, "sampler"):
             train_loader.sampler.set_epoch(epoch)
@@ -220,7 +222,21 @@ def main(args: DictConfig):
                 plot_name = plot_name.replace("/", "__")
                 img.save(output_dir / f"{plot_name}__{epoch:05d}.png")
 
-        ut.save_model(args, epoch, model_without_ddp, optimizer, loss_scaler)
+        if val_name:
+            val_loss = eval_stats[f"eval/{val_name}/loss"]
+            if best_loss is None:
+                best_loss = val_loss
+            is_best = val_loss <= best_loss
+            best_loss = min(val_loss, best_loss)
+        ut.save_model(
+            args,
+            epoch,
+            model_without_ddp,
+            optimizer,
+            loss_scaler,
+            is_best=is_best,
+            best_loss=best_loss,
+        )
 
     if args.distributed:
         torch.distributed.destroy_process_group()

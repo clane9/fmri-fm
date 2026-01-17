@@ -285,10 +285,13 @@ def init_distributed_mode(args):
 # checkpoint saving utils adapted from beit3
 
 
-def save_model(args, epoch, model_without_ddp, optimizer, loss_scaler):
+def save_model(
+    args, epoch, model_without_ddp, optimizer, loss_scaler, is_best=False, best_loss=None
+):
     output_dir = Path(args.output_dir)
     checkpoint_path = output_dir / f"checkpoint-{epoch:05d}.pth"
     last_checkpoint_path = output_dir / "checkpoint-last.pth"
+    best_checkpoint_path = output_dir / "checkpoint-best.pth"
 
     to_save = {
         "model": model_without_ddp.state_dict(),
@@ -297,9 +300,15 @@ def save_model(args, epoch, model_without_ddp, optimizer, loss_scaler):
         "scaler": None if loss_scaler is None else loss_scaler.state_dict(),
         "args": OmegaConf.to_container(args),
     }
+    if best_loss is not None:
+        to_save["best_loss"] = best_loss
 
     print(f"saving checkpoint {last_checkpoint_path}")
     save_on_master(to_save, last_checkpoint_path)
+    if is_best:
+        print(f"saving checkpoint {best_checkpoint_path}")
+        save_on_master(to_save, best_checkpoint_path)
+
     if args.checkpoint_period and (epoch + 1) % args.checkpoint_period == 0:
         print(f"saving checkpoint {checkpoint_path}")
         save_on_master(to_save, checkpoint_path)
@@ -315,6 +324,7 @@ def save_model(args, epoch, model_without_ddp, optimizer, loss_scaler):
 def load_model(args, model_without_ddp, optimizer, loss_scaler):
     auto_resume = getattr(args, "auto_resume", True)
     output_dir = Path(args.output_dir)
+    best_loss = None
 
     last_checkpoint_path = output_dir / "checkpoint-last.pth"
     if auto_resume and last_checkpoint_path.exists():
@@ -331,7 +341,10 @@ def load_model(args, model_without_ddp, optimizer, loss_scaler):
             if loss_scaler is not None:
                 loss_scaler.load_state_dict(ckpt["scaler"])
             args.start_epoch = ckpt["epoch"] + 1
+            best_loss = ckpt.get("best_loss")
             print(f"loaded optimizer state, resuming training from {args.start_epoch}")
+
+    return best_loss
 
 
 # optimization utils

@@ -148,6 +148,9 @@ train_dataset: hcp-train
 eval_datasets:
   - hcp-train-subset
   - hcp-val
+# dataset to use for saving the best checkpoint
+# if null, then no best checkpoints are saved
+val_dataset: null
 
 # Data transform
 # clip extreme values to [-vmax, vmax]. note that during flat dataset generation, each

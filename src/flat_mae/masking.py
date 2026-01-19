@@ -3,6 +3,8 @@
 # References:
 # capi: https://github.com/facebookresearch/capi/blob/main/data.py
 
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,12 +33,25 @@ class RandomMasking(nn.Module):
             img_size = (num_frames, *img_size)
             patch_size = (t_patch_size, *patch_size)
 
+        # handle image size not divisible by patch size by padding on lower right edge
+        img_size_pad = tuple(math.ceil(d / p) * p for d, p in zip(img_size, patch_size))
+        if img_size_pad != img_size:
+            pad = [(0, m - n) for m, n in reversed(list(zip(img_size_pad, img_size)))]
+            unpad = [(0, -p) for _, p in pad]
+            pad = sum(pad, start=tuple())
+            unpad = sum(unpad, start=tuple())
+        else:
+            pad = unpad = None
+
         self.mask_ratio = mask_ratio
         self.img_size = img_size
         self.patch_size = patch_size
+        self.img_size_pad = img_size_pad
+        self.pad = pad
+        self.unpad = unpad
 
         patchify_layer = {2: Patchify2D, 3: Patchify3D}[len(img_size)]
-        self.patchify = patchify_layer(img_size, patch_size, in_chans=1)
+        self.patchify = patchify_layer(img_size_pad, patch_size, in_chans=1)
 
     def extra_repr(self):
         return f"mask_ratio={self.mask_ratio}"
@@ -52,11 +67,18 @@ class RandomMasking(nn.Module):
         else:
             img_mask = img_mask.expand((1, 1, *self.img_size))
 
+        if self.pad is not None:
+            img_mask = F.pad(img_mask, self.pad)
+
         mask_patches = self.patchify(img_mask)
         patch_mask = mask_patches.any(dim=-1).float()
         patch_mask, _ = trim_patch_mask(patch_mask, mask_ratio=self.mask_ratio, shuffle=True)
         mask_patches = patch_mask.unsqueeze(-1).expand(-1, -1, mask_patches.shape[-1])
         mask = self.patchify.unpatchify(mask_patches)
+
+        if self.pad is not None:
+            mask = F.pad(mask, self.unpad)
+
         mask = mask.reshape(self.img_size)  # [H, W] or [T, H, W]
         return mask
 

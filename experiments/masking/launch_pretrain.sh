@@ -8,7 +8,8 @@
 #SBATCH --output=slurms/slurm-%A_%a.out
 #SBATCH --nodelist=n-2,n-3,n-4
 #SBATCH --account=training
-#SBATCH --array=8-11
+# #SBATCH --array=8-11
+#SBATCH --array=12-13
 
 set -euo pipefail
 
@@ -37,6 +38,8 @@ configs=(
     "tube2x_mr0.9|mask_ratio=0.9 masking=tube mask_patch_size=32 plot_period=1"
     "tube_mr0.9_pep4|mask_ratio=0.9 masking=tube model_kwargs.pred_edge_pad=4 plot_period=1"
     "tube_mr0.9_pep8|mask_ratio=0.9 masking=tube model_kwargs.pred_edge_pad=8 plot_period=1"
+    "tube2x_mr0.5|mask_ratio=0.5 masking=tube mask_patch_size=32 plot_period=1"
+    "tube2x_mr0.95|mask_ratio=0.95 masking=tube mask_patch_size=32 plot_period=1"
 )
 
 config=${configs[SLURM_ARRAY_TASK_ID]}

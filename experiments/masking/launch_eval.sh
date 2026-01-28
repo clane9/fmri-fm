@@ -9,7 +9,8 @@
 #SBATCH --nodelist=n-2,n-3,n-4
 #SBATCH --account=training
 # #SBATCH --array=0-7
-#SBATCH --array=8-11
+# #SBATCH --array=8-11
+#SBATCH --array=12-13
 
 set -euo pipefail
 
@@ -40,6 +41,8 @@ configs=(
     tube2x_mr0.9/patch/attn
     tube_mr0.9_pep4/patch/attn
     tube_mr0.9_pep8/patch/attn
+    tube2x_mr0.5/patch/attn
+    tube2x_mr0.95/patch/attn
 )
 config=${configs[SLURM_ARRAY_TASK_ID]}
 key=$(echo $config | cut -d / -f 1)

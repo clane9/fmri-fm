@@ -36,6 +36,7 @@ configs=(
     "cross_reg1_pep4|model_kwargs.decoding=cross model_kwargs.reg_tokens=1 model_kwargs.pred_edge_pad=4"
     "crossreg_reg4_pep4|model_kwargs.decoding=crossreg model_kwargs.reg_tokens=4 model_kwargs.pred_edge_pad=4"
     "crossreg_reg1_pep4|model_kwargs.decoding=crossreg model_kwargs.reg_tokens=1 model_kwargs.pred_edge_pad=4"
+    "crossreg_reg16_pep4|model_kwargs.decoding=crossreg model_kwargs.reg_tokens=16 model_kwargs.pred_edge_pad=4"
 )
 
 config=${configs[SLURM_ARRAY_TASK_ID]}

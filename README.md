@@ -48,10 +48,6 @@ experiments/
 
 Run an experiment via its launch script:
 
-```bash
-bash experiments/input_space/launch_pretrain.sh
-```
-
 Each experiment folder contains:
 - `pretrain.yaml` - experiment-specific config (overrides defaults)
 - `launch_pretrain.sh` - SLURM launch script

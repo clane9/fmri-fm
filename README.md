@@ -1,5 +1,3 @@
-# CortexMAE
-
 Masked autoencoder (MAE) pretraining for fMRI data using cortical flat map representations.
 
 ## Structure

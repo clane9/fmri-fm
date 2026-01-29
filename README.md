@@ -13,21 +13,9 @@ src/flat_mae/
     └── default_pretrain.yaml # Default configuration
 ```
 
-## Installation
-
-```bash
-pip install -e .
-```
-
-Or with [uv](https://docs.astral.sh/uv/):
-
-```bash
-uv sync
-```
-
 ## Experiments
 
-Experiments are organized under `experiments/`, each with its own config and launch script:
+Experiments are organized under `experiments/`, each with its own set of scripts
 
 ```
 experiments/
@@ -41,12 +29,3 @@ experiments/
 ├── pos_embed/        # Position embedding ablation
 └── target_norm/      # Target normalization ablation
 ```
-
-## Usage
-
-Run an experiment via its launch script:
-
-Each experiment folder contains:
-- `pretrain.yaml` - experiment-specific config (overrides defaults)
-- `launch_pretrain.sh` - SLURM launch script
-- `output/` - checkpoints and logs

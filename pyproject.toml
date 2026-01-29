@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fmri-fm"
 dynamic = ["version"]
-description = "MedARC fMRI foundation model"
+description = "CortexMAE"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

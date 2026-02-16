@@ -6,12 +6,13 @@
 #SBATCH --time=infinite
 #SBATCH --partition=main
 #SBATCH --output=slurms/slurm-%A_%a.out
-#SBATCH --nodelist=n-1,n-2,n-4
+#SBATCH --nodelist=n-1,n-2,n-3,n-4
 #SBATCH --account=training
 # #SBATCH --array=0-23
 # #SBATCH --array=24-39
-#SBATCH --array=40-55
-#SBATCH --dependency=afterany:2937
+# #SBATCH --array=40-55
+#SBATCH --array=56-99
+# #SBATCH --dependency=afterany:2937
 
 set -euo pipefail
 
@@ -44,6 +45,17 @@ configs=(
     mni_cortex_lr3e-4_2/patch/attn
     mni_cortex_lr1e-3_1/patch/attn
     mni_cortex_lr1e-3_2/patch/attn
+    flat_lr1e-3_1/patch/attn
+    flat_lr1e-3_2/patch/attn
+    flat_lr1e-3_3/patch/attn
+    flat_lr1e-3_4/patch/attn
+    flat_lr1e-3_5/patch/attn
+    schaefer400_lr3e-4_3/patch/attn
+    schaefer400_lr3e-4_4/patch/attn
+    schaefer400_lr3e-4_5/patch/attn
+    mni_cortex_lr1e-3_3/patch/attn
+    mni_cortex_lr1e-3_4/patch/attn
+    mni_cortex_lr1e-3_5/patch/attn
 )
 
 datasets=(

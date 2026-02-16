@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=input_space
+#SBATCH --job-name=target_norm
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-task=1
@@ -8,8 +8,7 @@
 #SBATCH --output=slurms/slurm-%A_%a.out
 #SBATCH --nodelist=n-1,n-2,n-3,n-4
 #SBATCH --account=training
-# #SBATCH --array=0-27
-#SBATCH --array=28-104
+#SBATCH --array=0-7
 
 set -euo pipefail
 
@@ -23,39 +22,27 @@ set -a
 source .env
 set +a
 
-EXP_NAME="input_space_v2"
+EXP_NAME="target_norm_v2"
 EXP_DIR="experiments/${EXP_NAME}"
 OUT_DIR="${EXP_DIR}/output"
 
 configs=(
-    schaefer400_lr3e-4_1/cls
-    schaefer400_lr3e-4_2/cls
-    mni_cortex_lr1e-3_1/cls
-    mni_cortex_lr1e-3_2/cls
-    flat_lr1e-3_1/cls
-    flat_lr1e-3_2/cls
-    flat_lr1e-3_3/cls
-    flat_lr1e-3_4/cls
-    flat_lr1e-3_5/cls
-    schaefer400_lr3e-4_3/cls
-    schaefer400_lr3e-4_4/cls
-    schaefer400_lr3e-4_5/cls
-    mni_cortex_lr1e-3_3/cls
-    mni_cortex_lr1e-3_4/cls
-    mni_cortex_lr1e-3_5/cls
+    pca_nc2_renorm/patch/attn
+    pca_nc8_renorm/patch/attn
 )
 
 datasets=(
-    abide_dx
-    adhd200_dx
-    adni_ad_vs_cn
-    ppmi_dx
     aabc_age
-    aabc_sex
     hcpya_rest1lr_gender
+    hcpya_task21
+    nsd_cococlip
 )
-
-# 4 models x 7 datasets
+batch_sizes=(
+    2
+    2
+    64
+    64
+)
 
 num_datasets=${#datasets[@]}
 configid=$(( $SLURM_ARRAY_TASK_ID / $num_datasets ))
@@ -63,11 +50,10 @@ datasetid=$(( $SLURM_ARRAY_TASK_ID % $num_datasets ))
 
 config=${configs[configid]}
 key=$(echo $config | cut -d / -f 1)
-space=$(echo $key | sed 's/\(.*\)_lr.*/\1/')
 repr=$(echo $config | cut -d / -f 2)
-clf="logistic"
+clf=$(echo $config | cut -d / -f 3)
 
-model="${space}_mae"
+model="flat_mae"
 ckpt_path="${OUT_DIR}/${EXP_NAME}/${key}/pretrain/checkpoint-last.pth"
 if [[ ! -f $ckpt_path ]]; then
     echo "checkpoint ${ckpt_path} doesn't exist; not running"
@@ -75,9 +61,10 @@ if [[ ! -f $ckpt_path ]]; then
 fi
 
 dataset=${datasets[datasetid]}
-overrides="model_kwargs.ckpt_path=${ckpt_path} batch_size=2 n_trials=100"
+bs=${batch_sizes[datasetid]}
+overrides="model_kwargs.ckpt_path=${ckpt_path} epochs=4 batch_size=${bs} accum_iter=2 lr=0.001 num_workers=8 wandb=false"
 
-notes="input_space ablation v2 $key; eval (${dataset} ${repr} ${clf})"
+notes="target_norm ablations v2 $key; eval (${dataset} ${repr} ${clf})"
 
 name="${EXP_NAME}/${key}/eval/${dataset}__${repr}__${clf}"
 result="${OUT_DIR}/${name}/eval_table.csv"
@@ -86,9 +73,13 @@ if [[ -f $result ]]; then
     exit
 fi
 
-uv run --no-sync python -W ignore -m fmri_fm_eval.main_logistic_loop \
+# add small delay between jobs
+# sleep $(( SLURM_ARRAY_TASK_ID * 10 ))
+
+uv run --no-sync python -m fmri_fm_eval.main_probe \
     $model \
     $repr \
+    $clf \
     $dataset \
     --overrides \
     output_root="${OUT_DIR}" \

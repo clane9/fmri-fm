@@ -626,11 +626,15 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
         pred_mask: Tensor | None = None,
         pred_mask_ratio: float | None = None,
         pred_edge_pad: int | None = None,
+        full_decoding: bool = False,
     ):
         """
         prepare prediction mask by removing visible content
         visible_mask: [B, C, H, W] or [B, C, T, H, W], 1 = visible, 0 = invisible
         pred_mask: same shape, 1 = predict, 0 = don't predict
+        pred_mask_ratio: prediction masking ratio for sparse decoding
+        pred_edge_pad: number of pixels to pad visible mask and exclude from prediction
+        full_decoding: decode all patches, including visible. used for denoising inference.
         """
         if pred_mask is None:
             pred_mask = torch.ones_like(visible_mask)
@@ -641,7 +645,8 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
             visible_mask = pad_image_mask(visible_mask, pad=pred_edge_pad)
 
         # don't decode visible pixels (duh)
-        pred_mask = pred_mask * (1 - visible_mask)
+        if not full_decoding:
+            pred_mask = pred_mask * (1 - visible_mask)
 
         # patchify
         pred_mask_patches = self.pred_patchify(pred_mask)  # [B, N, P]
@@ -729,6 +734,7 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
         mask_ratio: float | None = 0.75,
         pred_mask_ratio: float | None = None,
         pred_edge_pad: int | None = None,
+        full_decoding: bool = False,
         with_state: bool = True,
     ) -> Tensor | tuple[Tensor, dict[str, Tensor]]:
         if targets is None:
@@ -749,6 +755,7 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
             pred_mask=pred_mask,
             pred_mask_ratio=pred_mask_ratio,
             pred_edge_pad=pred_edge_pad,
+            full_decoding=full_decoding,
         )
 
         preds = self.forward_decoder(patch_embeds, reg_embeds, visible_ids, pred_ids)

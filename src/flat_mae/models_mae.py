@@ -971,7 +971,6 @@ def mae_vit_base(**kwargs):
 
 
 def mae_vit_d15(**kwargs):
-    # nb same as vit base but to complete the sequence
     kwargs.pop("decoder_depth", None)
     model_args = dict(
         embed_dim=960,

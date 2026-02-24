@@ -44,6 +44,7 @@ configs=(
     "d6_2|model=mae_vit_d6 seed=4129"
     "d9_2|model=mae_vit_d9 seed=4129"
     "d15_2|model=mae_vit_d15 seed=4129"
+    "d12_2|model=mae_vit_d12 seed=4129"
 )
 
 config=${configs[SLURM_ARRAY_TASK_ID]}

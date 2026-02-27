@@ -8,11 +8,12 @@
 #SBATCH --output=slurms/slurm-%A_%a.out
 #SBATCH --nodelist=n-1,n-2,n-3,n-4
 #SBATCH --account=training
-#SBATCH --array=0-4
+#SBATCH --array=0-1
 
 set -euo pipefail
 
-ROOT="${HOME}/fmri-fm"
+# ROOT="${HOME}/fmri-fm"
+ROOT="/data/connor/fmri-fm"
 cd $ROOT
 
 # export all env variables
@@ -25,18 +26,15 @@ EXP_DIR="experiments/${EXP_NAME}"
 OUT_DIR="${EXP_DIR}/output"
 
 configs=(
-    "coord_frame|no_coord_normalize=false normalize=frame"
-    "coord_global|no_coord_normalize=false normalize=global"
-    "coord_none|no_coord_normalize=false normalize=null"
-    "nocoord_frame|no_coord_normalize=true normalize=frame"
-    "nocoord_global|no_coord_normalize=true normalize=global"
+    "nocoord_frame_mni|no_coord_normalize=true normalize=frame input_space=mni_cortex"
+    "nocoord_global_mni|no_coord_normalize=true normalize=global input_space=mni_cortex"
 )
 
 config=${configs[SLURM_ARRAY_TASK_ID]}
 name=$(echo $config | cut -d '|' -f 1)
 overrides=$(echo $config | cut -d '|' -f 2)
 
-base_config="${EXP_DIR}/pretrain.yaml"
+base_config="${EXP_DIR}/pretrain_stream.yaml"
 fullname="${EXP_NAME}/${name}/pretrain"
 notes="input_norm ablations $name (${overrides})"
 

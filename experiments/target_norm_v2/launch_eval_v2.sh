@@ -6,9 +6,10 @@
 #SBATCH --time=infinite
 #SBATCH --partition=main
 #SBATCH --output=slurms/slurm-%A_%a.out
-#SBATCH --nodelist=n-1,n-2
+#SBATCH --nodelist=n-4
 #SBATCH --account=training
-#SBATCH --array=0-3
+# #SBATCH --array=0-3
+#SBATCH --array=4-5
 
 set -euo pipefail
 
@@ -30,6 +31,7 @@ OUT_DIR="${EXP_DIR}/output"
 configs=(
     pca_nc2_renorm/patch/attn
     pca_nc8_renorm/patch/attn
+    none/patch/attn
 )
 
 datasets=(

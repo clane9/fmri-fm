@@ -6,13 +6,14 @@
 #SBATCH --time=infinite
 #SBATCH --partition=main
 #SBATCH --output=slurms/slurm-%A_%a.out
-#SBATCH --nodelist=n-1,n-2
+#SBATCH --nodelist=n-1,n-2,n-3,n-4
 #SBATCH --account=training
-#SBATCH --array=0-1
+#SBATCH --array=2
 
 set -euo pipefail
 
-ROOT="${HOME}/fmri-fm"
+# ROOT="${HOME}/fmri-fm"
+ROOT="/data/connor/fmri-fm"
 cd $ROOT
 
 # export all env variables
@@ -27,6 +28,7 @@ OUT_DIR="${EXP_DIR}/output"
 configs=(
     "pca_nc2_renorm|model_kwargs.target_norm=pca model_kwargs.pca_norm_nc=2"
     "pca_nc8_renorm|model_kwargs.target_norm=pca model_kwargs.pca_norm_nc=8"
+    "none|"
 )
 
 config=${configs[SLURM_ARRAY_TASK_ID]}

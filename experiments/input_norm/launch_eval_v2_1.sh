@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=augmentation
+#SBATCH --job-name=input_norm
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-task=1
@@ -8,8 +8,7 @@
 #SBATCH --output=slurms/slurm-%A_%a.out
 #SBATCH --nodelist=n-4
 #SBATCH --account=training
-# #SBATCH --array=0-7
-#SBATCH --array=8-9
+#SBATCH --array=0-3
 
 set -euo pipefail
 
@@ -24,16 +23,13 @@ set -a
 source .env
 set +a
 
-EXP_NAME="augmentation"
+EXP_NAME="input_norm"
 EXP_DIR="experiments/${EXP_NAME}"
 OUT_DIR="${EXP_DIR}/output"
 
 configs=(
-    tr0.8/patch/attn
-    crop0.8-1.0/patch/attn
-    crop0.5-0.8/patch/attn
-    jitter0.2/patch/attn
-    none/patch/attn
+    nocoord_global/patch/attn
+    nocoord_global_mni/patch/attn
 )
 
 datasets=(
@@ -54,7 +50,11 @@ key=$(echo $config | cut -d / -f 1)
 repr=$(echo $config | cut -d / -f 2)
 clf=$(echo $config | cut -d / -f 3)
 
-model="flat_mae"
+if [[ $key == *_mni ]]; then
+    model="mni_cortex_mae"
+else
+    model="flat_mae"
+fi
 ckpt_path="${OUT_DIR}/${EXP_NAME}/${key}/pretrain/checkpoint-last.pth"
 if [[ ! -f $ckpt_path ]]; then
     echo "checkpoint ${ckpt_path} doesn't exist; not running"
@@ -63,11 +63,11 @@ fi
 
 dataset=${datasets[datasetid]}
 bs=${batch_sizes[datasetid]}
-overrides="model_kwargs.ckpt_path=${ckpt_path} batch_size=${bs} accum_iter=2"
+overrides="model_kwargs.ckpt_path=${ckpt_path} model_kwargs.no_coord_normalize=False batch_size=${bs} accum_iter=2"
 
-notes="augmentation ablations $key; eval v2 (${dataset} ${repr} ${clf})"
+notes="input_norm ablation $key; eval v2 (${dataset} ${repr} ${clf})"
 
-name="${EXP_NAME}/${key}/eval_v2/${dataset}__${repr}__${clf}"
+name="${EXP_NAME}/${key}/eval_v2_1/${dataset}__${repr}__${clf}"
 result="${OUT_DIR}/${name}/eval_table.csv"
 if [[ -f $result ]]; then
     echo "result $result exists; skipping"

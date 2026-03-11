@@ -8,8 +8,8 @@
 #SBATCH --output=slurms/slurm-%A_%a.out
 #SBATCH --nodelist=n-4
 #SBATCH --account=training
-# #SBATCH --array=0-7
-#SBATCH --array=8-9
+# #SBATCH --array=0-23
+#SBATCH --array=24-29
 
 set -euo pipefail
 
@@ -29,21 +29,23 @@ EXP_DIR="experiments/${EXP_NAME}"
 OUT_DIR="${EXP_DIR}/output"
 
 configs=(
-    tr0.8/patch/attn
-    crop0.8-1.0/patch/attn
-    crop0.5-0.8/patch/attn
-    jitter0.2/patch/attn
-    none/patch/attn
+    tr0.8/patch
+    crop0.8-1.0/patch
+    crop0.5-0.8/patch
+    jitter0.2/patch
+    none/patch
 )
 
 datasets=(
-    hcpya_task21
-    nsd_cococlip
+    abide_dx
+    adhd200_dx
+    adni_ad_vs_cn
+    ppmi_dx
+    aabc_age
+    aabc_sex
 )
-batch_sizes=(
-    64
-    64
-)
+
+# 4 configs x 6 datasets
 
 num_datasets=${#datasets[@]}
 configid=$(( $SLURM_ARRAY_TASK_ID / $num_datasets ))
@@ -52,7 +54,7 @@ datasetid=$(( $SLURM_ARRAY_TASK_ID % $num_datasets ))
 config=${configs[configid]}
 key=$(echo $config | cut -d / -f 1)
 repr=$(echo $config | cut -d / -f 2)
-clf=$(echo $config | cut -d / -f 3)
+clf="logistic"
 
 model="flat_mae"
 ckpt_path="${OUT_DIR}/${EXP_NAME}/${key}/pretrain/checkpoint-last.pth"
@@ -62,8 +64,7 @@ if [[ ! -f $ckpt_path ]]; then
 fi
 
 dataset=${datasets[datasetid]}
-bs=${batch_sizes[datasetid]}
-overrides="model_kwargs.ckpt_path=${ckpt_path} batch_size=${bs} accum_iter=2"
+overrides="model_kwargs.ckpt_path=${ckpt_path} batch_size=2"
 
 notes="augmentation ablations $key; eval v2 (${dataset} ${repr} ${clf})"
 
@@ -74,13 +75,9 @@ if [[ -f $result ]]; then
     exit
 fi
 
-# add small delay between jobs
-# sleep $(( SLURM_ARRAY_TASK_ID * 10 ))
-
-uv run --no-sync python -m fmri_fm_eval.main_probe \
+uv run --no-sync python -W ignore -m fmri_fm_eval.main_logistic \
     $model \
     $repr \
-    $clf \
     $dataset \
     --overrides \
     output_root="${OUT_DIR}" \

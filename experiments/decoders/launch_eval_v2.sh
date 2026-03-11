@@ -6,9 +6,10 @@
 #SBATCH --time=infinite
 #SBATCH --partition=main
 #SBATCH --output=slurms/slurm-%A_%a.out
-#SBATCH --nodelist=n-1,n-2
+#SBATCH --nodelist=n-1,n-2,n-3,n-4
 #SBATCH --account=training
-#SBATCH --array=0-43
+# #SBATCH --array=0-43
+#SBATCH --array=44-61
 
 set -euo pipefail
 
@@ -50,6 +51,15 @@ configs=(
     crossreg_reg16/reg/attn
     crossreg_reg1_pep4/patch/attn
     crossreg_reg1_pep4/reg/linear
+    attn_reg1/patch/linear
+    cross_reg1/patch/linear
+    crossreg_reg1/patch/linear
+    crossreg_reg4/patch/linear
+    crossreg_reg16/patch/linear
+    attn_reg1_pep4/patch/linear
+    cross_reg1_pep4/patch/linear
+    crossreg_reg1_pep4/patch/linear
+    crossreg_reg4_pep4/patch/linear
 )
 
 datasets=(

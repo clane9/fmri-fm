@@ -8,7 +8,7 @@
 #SBATCH --output=slurms/slurm-%A_%a.out
 #SBATCH --nodelist=n-1,n-2,n-3,n-4
 #SBATCH --account=training
-#SBATCH --array=0-2
+#SBATCH --array=3
 
 set -euo pipefail
 
@@ -29,6 +29,7 @@ configs=(
     "patch8|patch_size=8 mask_patch_size=16"
     "patch8_mps8|patch_size=8"
     "patch8_mps8_2|patch_size=8 checkpoint_period=5"
+    "patch8_mps8_pep4|patch_size=8 model_kwargs.pred_edge_pad=4"
 )
 
 config=${configs[SLURM_ARRAY_TASK_ID]}

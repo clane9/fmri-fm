@@ -78,9 +78,9 @@ def main(args: DictConfig):
         # 3. patchify with 8 x 8 x 8 patches
         # 4. drop patches not containing enough cortex voxels
         # 5. rearrange "(d p) (h p) (w p) -> (d h w) (p p p)"
-        # this results in 466 valid cube patches of dim 8 x 8 x 8 = 512
+        # this results in 465 valid cube patches of dim 8 x 8 x 8 = 512
         # patch size is therefore fixed.
-        args.img_size = (466, 512)
+        args.img_size = (465, 512)
         args.patch_size = (1, 512)
     else:
         raise ValueError(f"input space {args.input_space} not implemented")

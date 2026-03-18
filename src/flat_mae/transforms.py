@@ -192,9 +192,11 @@ class MNICortexUnmask:
         self.threshold = threshold
 
         # load cortex mask from schaefer400 parcellation
+        # important, mask must be in RAS orientation
         mask_path = nisc.fetch_schaefer(400, space="mni")
         mask_img = nib.load(mask_path)
-        mask = np.ascontiguousarray(mask_img.get_fdata().T) > 0  # (D, H, W)
+        mask_img = nisc.ensure_mni152_2mm_ras(mask_img, interpolation="nearest")
+        mask = np.ascontiguousarray(mask_img.get_fdata().T) > 0  # (Z, Y, X)
         assert mask.sum() == self.dim
 
         # gather_ids: (N, P) array of indices in [0, D) into the original data

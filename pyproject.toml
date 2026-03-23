@@ -35,6 +35,7 @@ dependencies = [
     "cloudpathlib[s3]",
     "s3fs",
     "lightning-sdk",
+    "scikit-image",
 ]
 
 [project.optional-dependencies]

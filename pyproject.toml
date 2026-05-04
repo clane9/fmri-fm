@@ -3,12 +3,13 @@ requires = ["setuptools>=64", "setuptools_scm[toml]>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fmri-fm"
+name = "cortexmae"
 dynamic = ["version"]
-description = "MedARC fMRI foundation model"
+description = "CortexMAE fMRI foundation model"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "brainmarks",
     "datasets",
     "einops",
     "huggingface_hub",
@@ -40,15 +41,10 @@ dependencies = [
 
 [project.optional-dependencies]
 
-eval = [
-    "fmri-fm-eval"
-]
-
 [tool.setuptools_scm]
 version_file = "src/_version.py"
 
 [tool.uv.sources]
-fmri-fm-eval = { git = "https://github.com/clane9/fmri-fm-eval.git", rev = "65be98d36abc6dc59e7db68d68f7f63123a3fee6" }
 nsdcode = { git = "https://github.com/cvnlab/nsdcode.git", rev = "bfd36a503cc90a3eb3ebfd69b269403f7e186924" }
 neuromaps = { git = "https://github.com/netneurolab/neuromaps.git", rev = "f0ed67c44d633061b93c6d337a1b233f6895c408" }
 

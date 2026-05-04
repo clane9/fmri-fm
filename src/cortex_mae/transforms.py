@@ -10,7 +10,7 @@ import nibabel as nib
 import numpy as np
 import neuromaps.transforms
 
-import flat_mae.nisc as nisc
+import cortex_mae.nisc as nisc
 
 # shared flat map resampler
 _FLAT_RESAMPLER = nisc.flat_resampler_fslr64k_224_560()

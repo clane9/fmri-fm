@@ -27,12 +27,12 @@ from torch.utils.data import Subset
 from torch.utils.data.distributed import DistributedSampler
 from webdataset import WebLoader
 
-import flat_mae.data as flat_data
-import flat_mae.utils as ut
-import flat_mae.models_mae as models_mae
-import flat_mae.masking as masking
-import flat_mae.transforms as transforms
-import flat_mae.visualization as vis
+import cortex_mae.data as flat_data
+import cortex_mae.utils as ut
+import cortex_mae.models_mae as models_mae
+import cortex_mae.masking as masking
+import cortex_mae.transforms as transforms
+import cortex_mae.visualization as vis
 
 # quiet noisy hf progress bars when downloading data
 hfds.disable_progress_bars()

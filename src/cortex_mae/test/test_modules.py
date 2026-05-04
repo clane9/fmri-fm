@@ -3,7 +3,7 @@ from typing import Type
 import pytest
 import torch
 
-from flat_mae.modules import (
+from cortex_mae.modules import (
     Patchify2D,
     Patchify3D,
     AbsolutePosEmbed,

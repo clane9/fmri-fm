@@ -3,9 +3,9 @@ import torch
 from torch import Tensor
 from torch.utils.data import default_collate
 
-pytest.importorskip("fmri_fm_eval.models.registry")
-from fmri_fm_eval.models.registry import create_model, import_model_plugins
-import fmri_fm_eval.readers as readers
+pytest.importorskip("brainmarks.models.registry")
+from brainmarks.models.registry import create_model, import_model_plugins
+import brainmarks.readers as readers
 
 # Import all available plugins to implicitly register models.
 import_model_plugins()
@@ -23,7 +23,7 @@ def get_dummy_sample(space: str, n_samples: int) -> dict[str, Tensor]:
 
 
 @pytest.mark.parametrize("n_samples", [16, 48, 10, 40])
-@pytest.mark.parametrize("name", ["flat_mae_base_patch16_16", "flat_mae_base_patch16_2"])
+@pytest.mark.parametrize("name", ["cortex_mae_base_patch16_16", "cortex_mae_base_patch16_2"])
 def test_model(name: str, n_samples: int):
     transform, model = create_model(name)
 

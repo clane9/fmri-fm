@@ -4,7 +4,7 @@ import pytest
 import torch
 import timm
 
-import flat_mae.models_mae as models_mae
+import cortex_mae.models_mae as models_mae
 
 _CFGS = {
     "tiny": dict(

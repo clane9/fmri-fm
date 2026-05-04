@@ -6,11 +6,11 @@ import torch.nn.functional as F
 from torch import Tensor
 from einops import rearrange
 
-from fmri_fm_eval.models.base import Embeddings
-from fmri_fm_eval.models.registry import register_model
+from brainmarks.models.base import Embeddings
+from brainmarks.models.registry import register_model
 
-import flat_mae.models_mae as models_mae
-import flat_mae.transforms as flat_transforms
+import cortex_mae.models_mae as models_mae
+import cortex_mae.transforms as flat_transforms
 
 
 class MaskedEncoderWrapper(nn.Module):
@@ -150,7 +150,7 @@ def resample_to_tr(x: Tensor, tr: float, target_tr: float, mode: str = "linear")
 
 
 @register_model
-def flat_mae_base_patch16_16(**kwargs) -> tuple[Transform, MaskedEncoderWrapper]:
+def cortex_mae_base_patch16_16(**kwargs) -> tuple[Transform, MaskedEncoderWrapper]:
     transform = Transform()
     model = models_mae.MaskedAutoencoderViT.from_pretrained("medarc/fm_mae_vit_base_patch16-16.hcp")
     model = MaskedEncoderWrapper(model.encoder)
@@ -158,7 +158,7 @@ def flat_mae_base_patch16_16(**kwargs) -> tuple[Transform, MaskedEncoderWrapper]
 
 
 @register_model
-def flat_mae_base_patch16_2(**kwargs) -> tuple[Transform, MaskedEncoderWrapper]:
+def cortex_mae_base_patch16_2(**kwargs) -> tuple[Transform, MaskedEncoderWrapper]:
     transform = Transform()
     model = models_mae.MaskedAutoencoderViT.from_pretrained("medarc/fm_mae_vit_base_patch16-2.hcp")
     model = MaskedEncoderWrapper(model.encoder)
@@ -166,7 +166,7 @@ def flat_mae_base_patch16_2(**kwargs) -> tuple[Transform, MaskedEncoderWrapper]:
 
 
 @register_model
-def flat_mae(
+def cortex_mae(
     *,
     ckpt_path: str,
     no_coord_normalize: bool | None = None,

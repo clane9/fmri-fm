@@ -42,7 +42,7 @@ dependencies = [
 [project.optional-dependencies]
 
 [tool.setuptools_scm]
-version_file = "src/_version.py"
+version_file = "src/cortex_mae/_version.py"
 
 [tool.uv.sources]
 nsdcode = { git = "https://github.com/cvnlab/nsdcode.git", rev = "bfd36a503cc90a3eb3ebfd69b269403f7e186924" }

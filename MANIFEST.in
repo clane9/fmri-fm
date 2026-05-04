@@ -1,4 +1,4 @@
-include src/flat_mae/resources/*
+include src/cortex_mae/resources/*
 prune experiments
 prune notebooks
 prune .github

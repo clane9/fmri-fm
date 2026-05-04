@@ -893,7 +893,7 @@ def flat_pca_normalize(
     # these were computed on the hcpya clips training set using one frame per clip and
     # normalizing each frame to mean 0 stdev 1. the resulting components closely match
     # the classic principal gradients.
-    path = importlib.resources.files("flat_mae.resources").joinpath("flat_pca_n8_224_560.npz")
+    path = importlib.resources.files("cortex_mae.resources").joinpath("flat_pca_n8_224_560.npz")
     components = np.load(path)["components"]
     components = components[:num_components]
     norm = PCANormalize(components, img_size, patch_size)

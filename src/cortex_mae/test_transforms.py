@@ -1,6 +1,6 @@
 import torch
 
-from flat_mae.transforms import MNICortexUnmask
+from cortex_mae.transforms import MNICortexUnmask
 
 
 def test_mni_cortex_unmask():

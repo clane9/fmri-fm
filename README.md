@@ -2,7 +2,8 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/clane9/fmri-fm/blob/clean_release/notebooks/quickstart.ipynb)
 [![Preprint](https://img.shields.io/badge/arXiv-2510.13768-green?logo=bookstack&logoColor=white)](https://arxiv.org/abs/2510.13768)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Code License](https://img.shields.io/badge/Code_License-Apache_2.0-blue.svg)](LICENSE)
+[![Model License](https://img.shields.io/badge/Model_License-CC_BY--NC_4.0-lightgrey)](https://creativecommons.org/licenses/by-nc/4.0/deed.en)
 
 CortexMAE is an fMRI foundation model trained on 2.1K hours of fMRI data from the [Human Connectome Project](https://www.humanconnectome.org/study/hcp-young-adult/overview) using the [masked autoencoder](https://arxiv.org/abs/2205.09113) framework. We release a family of models trained with different fMRI input representations:
 - **CortexMAE-P**: a computationally efficient model based on the Schaefer-400 parcellation.
@@ -11,12 +12,6 @@ CortexMAE is an fMRI foundation model trained on 2.1K hours of fMRI data from th
 
 <p align="center">
   <img src=".github/fmri_spaces.png" width="600">
-</p>
-
-The strength of CortexMAE is its learned representations of dynamic fMRI activity patterns. On cross-subject decoding tasks, CortexMAE-P and CortexMAE-V are best in their respective classes, while CortexMAE-F is SotA overall.
-
-<p align="center">
-  <img src=".github/state_decoding.png" width="450">
 </p>
 
 ## Installation
@@ -55,7 +50,7 @@ See [notebooks/quickstart.ipynb](notebooks/quickstart.ipynb) for the full demo.
 
 ## Pretrained models
 
-Pretrained checkpoints and training logs are available [HuggingFace](https://huggingface.co/medarc/CortexMAE). We release default models for each input space:
+Pretrained checkpoints and training logs are available on [HuggingFace](https://huggingface.co/medarc/CortexMAE). We release default models for each input space:
 
 | name                  | input space        | shape       | size  |
 | --------------------- | ------------------ | ----------- | ----- |
@@ -87,11 +82,23 @@ The HCP-YA pretraining data are also available as [webdataset](https://github.co
 
 ## Pretraining
 
+To reproduce pretraining of the default CortexMAE-F model, run
+
 ```bash
-uv run python src/cortex_mae/main_pretrain.py --overrides input_space=flat
+uv run python src/cortex_mae/main_pretrain.py
 ```
 
-See the default config [src/cortex_mae/config/default_pretrain.yaml](src/cortex_mae/config/default_pretrain.yaml) for all available options.
+You can also override defaults
+
+```bash
+uv run python src/cortex_mae/main_pretrain.py \
+  --config config.yaml \
+  --overrides \
+  input_space=schaefer400 \
+  base_lr=3e-4
+```
+
+See the default config [src/cortex_mae/config/default_pretrain.yaml](src/cortex_mae/config/default_pretrain.yaml) for all available options. To reproduce specific model variants, use the original configs on [HuggingFace](https://huggingface.co/medarc/CortexMAE).
 
 ## Downstream evaluation
 
@@ -106,8 +113,7 @@ uv run python -m brainmarks.main_probe cortex_mae patch attn nsd_cococlip \
 
 ## License
 
-Code is released under the Apache License 2.0 (see [LICENSE](LICENSE)). Released
-model weights on HuggingFace are licensed CC-BY-NC (see [LICENSE.models](LICENSE.models)).
+Code is released under the Apache License 2.0 (see [LICENSE](LICENSE)). Model weights are relased under CC-BY-NC (see [LICENSE.models](LICENSE.models)).
 
 ## Citation
 

@@ -1,11 +1,12 @@
 import torch.nn as nn
 from torch import Tensor
+from einops import rearrange
 
 from brainmarks.models.base import Embeddings
 from brainmarks.models.registry import register_model
 
 import cortex_mae.models_mae as models_mae
-from cortex_mae.inference import CortexMAE, Transform, forward_embedding, unpack_batch
+from cortex_mae.inference import CortexMAE, Transform, pad_unfold
 
 
 class CortexMAEWrapper(nn.Module):
@@ -14,18 +15,28 @@ class CortexMAEWrapper(nn.Module):
     def __init__(self, encoder: models_mae.MaskedEncoder):
         super().__init__()
         self.encoder = encoder
+        self.num_frames = self.encoder.patchify.img_size[0]
 
     def forward(self, batch: dict[str, Tensor]) -> Embeddings:
-        bold, mask = unpack_batch(batch)
-        cls_embeds, reg_embeds, patch_embeds = forward_embedding(self.encoder, bold, mask)
+        bold = batch["bold"]
+        mask = batch["mask"]
+        B, C, T, H, W = bold.shape
+        if mask.ndim == 3:
+            mask = mask[:, None, None, :, :]
+        mask = mask.expand_as(bold)
 
-        # embeddings are shape [B N L D], where N = number of sliding windows; flatten
-        B, N, L, D = patch_embeds.shape
+        # pad/truncate and unfold into non-overlapping sliding windows
+        bold, mask, num_clips = pad_unfold(bold, mask, num_frames=self.num_frames)
+
+        cls_embeds, reg_embeds, patch_embeds = self.encoder.forward_embedding(bold, mask)
+
+        # unflatten batch and clip dimensions
         if cls_embeds is not None:
-            cls_embeds = cls_embeds.mean(dim=1)
+            cls_embeds = rearrange(cls_embeds, "(b n) l d -> b (n l) d", n=num_clips)
+            cls_embeds = cls_embeds.mean(dim=1, keepdim=True)
         if reg_embeds is not None:
-            reg_embeds = reg_embeds.flatten(1, 2)
-        patch_embeds = patch_embeds.flatten(1, 2)
+            reg_embeds = rearrange(reg_embeds, "(b n) l d -> b (n l) d", n=num_clips)
+        patch_embeds = rearrange(patch_embeds, "(b n) l d -> b (n l) d", n=num_clips)
 
         return Embeddings(cls_embeds, reg_embeds, patch_embeds)
 

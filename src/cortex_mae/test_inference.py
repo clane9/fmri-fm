@@ -7,6 +7,7 @@ from omegaconf import OmegaConf
 
 from cortex_mae.inference import (
     CortexMAE,
+    DenoisingOutput,
     EmbeddingOutput,
     ReconstructionOutput,
     resolve_file,
@@ -84,7 +85,19 @@ def test_forward_masked_recon_smoke():
     out = model.run_masked_recon(sample)
     assert isinstance(out, ReconstructionOutput)
     assert out.images.shape == out.pred_images.shape
-    assert out.images.ndim == 6  # [B, C, N, T, H, W]
+    assert out.images.ndim == 5  # [N, C, T, H, W]
+
+
+def test_forward_denoise_smoke():
+    model = CortexMAE.from_config(_flat_args())
+    sample = _dummy_sample()
+    out = model.run_denoise(sample, num_samples=2, batch_size=2)
+    assert isinstance(out, DenoisingOutput)
+    assert out.images.shape == out.pred_images.shape
+    assert out.images.ndim == 6  # [S, N, C, T, H, W]
+    assert out.images.shape[0] == 2  # S = num_samples
+    assert out.pred_mean.ndim == 5  # [N, C, T, H, W]
+    assert out.pred_mean.shape == out.pred_std.shape
 
 
 def test_forward_embedding_smoke():
@@ -92,9 +105,9 @@ def test_forward_embedding_smoke():
     sample = _dummy_sample()
     out = model.run_embedding(sample)
     assert isinstance(out, EmbeddingOutput)
-    assert out.patch_embeds.ndim == 4
-    B, N, L, D = out.patch_embeds.shape
-    assert B == 1 and D == 768
+    assert out.patch_embeds.ndim == 3
+    N, L, D = out.patch_embeds.shape
+    assert D == 768
 
 
 def test_from_checkpoint(tmp_path):
@@ -143,10 +156,9 @@ def test_pretrained_end_to_end(tmp_path):
         CORTEX_MAE_SLOW_TESTS=1 pytest src/cortex_mae/test_inference.py -k pretrained
     """
     model = CortexMAE.from_pretrained("cortex_mae_flat")
-    model.set_device()
 
     url = "s3://openneuro.org/ds006072/NON_BIDS/ciftis/sub-1_Drug2_rsfMRI_uout_bpss_sr_noGSR_sm4.dtseries.nii"
     path = resolve_file(url, cache_dir=tmp_path, anon=True)
     out = model.run_embedding(path)
-    B, N, L, D = out.patch_embeds.shape
-    assert B == 1 and D == 768
+    N, L, D = out.patch_embeds.shape
+    assert D == 768

@@ -48,7 +48,7 @@ path = cortex_mae.resolve_file(
   anon=True,
 )
 embeds = model.run_embedding(path)
-print(embeds.patch_embeds.shape)  # (batch, clips, tokens, dim)
+print(embeds.patch_embeds.shape)  # (clips, tokens, dim)
 ```
 
 See [notebooks/quickstart.ipynb](notebooks/quickstart.ipynb) for the full demo.

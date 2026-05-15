@@ -27,13 +27,13 @@ CACHE_DIR = platformdirs.user_cache_path("cortexmae")
 
 class EmbeddingOutput(NamedTuple):
     cls_embeds: Tensor | None
-    """cls embeddings [B N 1 D]"""
+    """cls embeddings [N 1 D]"""
 
     reg_embeds: Tensor | None
-    """register embeddings [B N R D]"""
+    """register embeddings [N R D]"""
 
     patch_embeds: Tensor
-    """patch embeddings [B N L D]"""
+    """patch embeddings [N L D]"""
 
 
 class ReconstructionOutput(NamedTuple):
@@ -41,19 +41,19 @@ class ReconstructionOutput(NamedTuple):
     """MAE MSE loss"""
 
     images: Tensor
-    """input images [B C N T H W]"""
+    """input images [N C T H W]"""
 
     pred_images: Tensor
-    """predicted images [B C N T H W]"""
+    """predicted images [N C T H W]"""
 
     img_mask: Tensor
-    """valid image mask [B C N T H W]"""
+    """valid image mask [N C T H W]"""
 
     visible_mask: Tensor
-    """observed image mask [B C N T H W]"""
+    """observed image mask [N C T H W]"""
 
     pred_mask: Tensor
-    """prediction image mask [B C N T H W]"""
+    """prediction image mask [N C T H W]"""
 
 
 class DenoisingOutput(NamedTuple):
@@ -61,25 +61,25 @@ class DenoisingOutput(NamedTuple):
     """MAE MSE loss"""
 
     images: Tensor
-    """input images [B S C N T H W]"""
+    """input images [S N C T H W]"""
 
     pred_images: Tensor
-    """predicted images [B S C N T H W]"""
+    """predicted images [S N C T H W]"""
 
     img_mask: Tensor
-    """valid image mask [B S C N T H W]"""
+    """valid image mask [S N C T H W]"""
 
     visible_mask: Tensor
-    """observed image mask [B S C N T H W]"""
+    """observed image mask [S N C T H W]"""
 
     pred_mask: Tensor
-    """prediction image mask [B S C N T H W]"""
+    """prediction image mask [S N C T H W]"""
 
     pred_mean: Tensor
-    """denoising prediction mean [B C N T H W]"""
+    """denoising prediction mean [N C T H W]"""
 
     pred_std: Tensor
-    """denoising prediction stdev [B C N T H W]"""
+    """denoising prediction stdev [N C T H W]"""
 
 
 class CortexMAE:
@@ -97,6 +97,7 @@ class CortexMAE:
         self.reader = reader
         self.transform = transform
         self.mask_fn = mask_fn
+        self.num_frames = model.encoder.patchify.img_size[0]
 
     @staticmethod
     def from_config(args: DictConfig, device: str | None = None) -> "CortexMAE":
@@ -177,18 +178,55 @@ class CortexMAE:
             raise TypeError(f"Invalid input {type(input)}")
         return sample
 
+    def _unpack_sample(self, sample: dict[str, Tensor]) -> tuple[Tensor, Tensor]:
+        bold = sample["bold"]
+        mask = sample["mask"]
+        C, T, H, W = bold.shape
+        H, W = mask.shape
+        bold = bold[None, ...]  # [1, C, T, H, W]
+        mask = mask.expand_as(bold)
+        return bold, mask
+
     @torch.inference_mode()
     def run_embedding(
         self,
         input: str | Path | dict[str, Tensor],
         *,
         tr: float | None = None,
+        batch_size: int | None = 8,
+        amp: bool | None = None,
     ) -> "EmbeddingOutput":
+        device = self.get_device()
+        if amp is None:
+            amp = device.type == "cuda"
+
         sample = self.load_input(input, tr=tr)
         sample = self.transform(sample)
-        bold, mask = unpack_batch(sample, device=self.get_device())
-        embeds = forward_embedding(self.model.encoder, bold, mask)
-        return embeds
+        bold, mask = self._unpack_sample(sample)
+
+        # pad/truncate and unfold into non-overlapping sliding windows
+        # [N, C, t, H, W]
+        bold, mask, _ = pad_unfold(bold, mask, self.num_frames)
+
+        batches = iter_batches(bold=bold, mask=mask, batch_size=batch_size)
+
+        state_keys = ["cls_embeds", "reg_embeds", "patch_embeds"]
+        state = {k: [] for k in state_keys}
+
+        for bold_, mask_, _ in batches:
+            bold_ = bold_.to(device)
+            mask_ = mask_.to(device)
+
+            with torch.autocast(device.type, torch.bfloat16, enabled=amp):
+                batch_embeds = self.model.encoder.forward_embedding(bold_, mask_)
+                for k, embeds in zip(state_keys, batch_embeds):
+                    state[k].append(None if embeds is None else embeds.cpu())
+
+        for k in state_keys:
+            values = state[k]
+            state[k] = torch.cat(values) if values[0] is not None else None
+
+        return EmbeddingOutput(**state)
 
     @torch.inference_mode()
     def run_masked_recon(
@@ -197,19 +235,55 @@ class CortexMAE:
         *,
         tr: float | None = None,
         mask_ratio: float | None = None,
-        batch_size: int | None = None,
+        pred_edge_pad: int | None = None,
+        batch_size: int | None = 8,
+        amp: bool | None = None,
     ) -> "ReconstructionOutput":
+        device = self.get_device()
+        if amp is None:
+            amp = device.type == "cuda"
+
         sample = self.load_input(input, tr=tr)
         sample = self.transform(sample)
-        bold, mask = unpack_batch(sample, device=self.get_device())
-        state = forward_masked_recon(
-            self.model,
-            bold,
-            mask,
+        bold, mask = self._unpack_sample(sample)
+
+        # pad/truncate and unfold into non-overlapping sliding windows
+        # [N, C, t, H, W]
+        bold, mask, _ = pad_unfold(bold, mask, self.num_frames)
+
+        batches = iter_batches(
+            bold=bold,
+            mask=mask,
             mask_fn=self.mask_fn,
             mask_ratio=mask_ratio,
             batch_size=batch_size,
         )
+
+        state_keys = ["images", "pred_images", "img_mask", "visible_mask", "pred_mask"]
+        state = {k: [] for k in ["loss"] + state_keys}
+
+        for bold_, mask_, visible_mask_ in batches:
+            bold_ = bold_.to(device)
+            mask_ = mask_.to(device)
+            if visible_mask_ is not None:
+                visible_mask_ = visible_mask_.to(device)
+
+            with torch.autocast(device.type, torch.bfloat16, enabled=amp):
+                batch_loss, batch_state = self.model.forward(
+                    images=bold_,
+                    img_mask=mask_,
+                    visible_mask=visible_mask_,
+                    mask_ratio=None if visible_mask_ is not None else mask_ratio,
+                    pred_edge_pad=pred_edge_pad,
+                )
+                state["loss"].append(batch_loss.cpu())
+                for k in state_keys:
+                    state[k].append(batch_state[k].cpu())
+
+        state["loss"] = torch.stack(state["loss"]).mean()
+        for k in state_keys:
+            state[k] = torch.cat(state[k])
+
         return ReconstructionOutput(**state)
 
     @torch.inference_mode()
@@ -218,139 +292,104 @@ class CortexMAE:
         input: str | Path | dict[str, Tensor],
         *,
         tr: float | None = None,
-        num_samples: int = 100,
         mask_ratio: float | None = None,
+        num_samples: int = 100,
         pred_edge_pad: int | None = None,
-        batch_size: int | None = None,
-    ):
-        assert num_samples > 1, f"denoising requires num_samples > 1, got {num_samples}"
+        batch_size: int | None = 8,
+        amp: bool | None = None,
+    ) -> "DenoisingOutput":
+        assert num_samples > 1, f"denoising needs num_samples > 1, got {num_samples}"
+        device = self.get_device()
+        if amp is None:
+            amp = device.type == "cuda"
+
         sample = self.load_input(input, tr=tr)
         sample = self.transform(sample)
-        bold, mask = unpack_batch(sample, device=self.get_device())
-        state = forward_masked_recon(
-            self.model,
-            bold,
-            mask,
-            mask_fn=self.mask_fn,
-            mask_ratio=mask_ratio,
-            num_samples=num_samples,
-            batch_size=batch_size,
-            pred_edge_pad=pred_edge_pad,
-        )
-        return DenoisingOutput(**state)
+        bold, mask = self._unpack_sample(sample)
 
-
-@torch.inference_mode()
-def forward_masked_recon(
-    model: models_mae.MaskedAutoencoderViT,
-    bold: Tensor,
-    mask: Tensor,
-    *,
-    mask_fn: masking.RandomMasking,
-    mask_ratio: float | None = None,
-    pred_edge_pad: int | None = None,
-    num_samples: int | None = None,
-    batch_size: int | None = None,
-) -> dict[str, Tensor]:
-    num_frames = model.encoder.patchify.img_size[0]
-
-    # repeat for multi-sample reconstruction
-    if num_samples:
+        # repeat for multi-sample denoising
+        # [S, C, T, H, W]
         bold = torch.repeat_interleave(bold, num_samples, dim=0)
         mask = torch.repeat_interleave(mask, num_samples, dim=0)
 
-    # pad/truncate and unfold into non-overlapping sliding windows
-    bold, mask, num_clips = pad_unfold(bold, mask, num_frames=num_frames)
+        # pad/truncate and unfold into non-overlapping sliding windows
+        # [S * N, C, t, H, W]
+        bold, mask, _ = pad_unfold(bold, mask, self.num_frames)
 
-    # B = (batch_size * num_samples * num_clips)
+        batches = iter_batches(
+            bold=bold,
+            mask=mask,
+            mask_fn=self.mask_fn,
+            mask_ratio=mask_ratio,
+            batch_size=batch_size,
+        )
+
+        state_keys = ["images", "pred_images", "img_mask", "visible_mask", "pred_mask"]
+        state = {k: [] for k in ["loss"] + state_keys}
+
+        for bold_, mask_, visible_mask_ in batches:
+            bold_ = bold_.to(device)
+            mask_ = mask_.to(device)
+            if visible_mask_ is not None:
+                visible_mask_ = visible_mask_.to(device)
+
+            with torch.autocast(device.type, torch.bfloat16, enabled=amp):
+                batch_loss, batch_state = self.model.forward(
+                    images=bold_,
+                    img_mask=mask_,
+                    visible_mask=visible_mask_,
+                    mask_ratio=None if visible_mask_ is not None else mask_ratio,
+                    pred_edge_pad=pred_edge_pad,
+                )
+                state["loss"].append(batch_loss.cpu())
+                for k in state_keys:
+                    state[k].append(batch_state[k].cpu())
+
+        state["loss"] = torch.stack(state["loss"]).mean()
+        for k in state_keys:
+            # [S, N, C, T, H, W]
+            state[k] = rearrange(torch.cat(state[k]), "(s n) c t h w -> s n c t h w", s=num_samples)
+
+        # aggregate predictions over the sample axis -> [N, C, T, H, W]
+        pred_images = state["pred_images"] * state["pred_mask"]
+        pred_count = state["pred_mask"].sum(dim=0)
+        pred_mean = pred_images.sum(dim=0) / pred_count.clip(min=1)
+        pred_err = ((pred_images - pred_mean) ** 2).sum(dim=0)
+        pred_std = (pred_err / pred_count.clip(min=1)).sqrt()
+        state["pred_mean"] = pred_mean
+        state["pred_std"] = pred_std
+
+        return DenoisingOutput(**state)
+
+
+def iter_batches(
+    bold: Tensor,
+    mask: Tensor,
+    *,
+    mask_fn: masking.RandomMasking | None = None,
+    mask_ratio: float | None = None,
+    batch_size: int | None = 8,
+):
     B, C, T, H, W = bold.shape
-
-    # random masks
-    visible_mask = torch.zeros_like(mask)
-    for ii in range(B):
-        visible_mask[ii] = mask_fn(mask[ii, 0, 0], mask_ratio=mask_ratio)
+    assert mask.shape == bold.shape
 
     if batch_size is None:
         batch_size = B
     num_batches = math.ceil(B / batch_size)
-    keys = ["images", "pred_images", "img_mask", "visible_mask", "pred_mask"]
-    state = {k: [] for k in ["loss"] + keys}
 
     for batch_idx in range(num_batches):
         start = batch_idx * batch_size
         stop = start + batch_size
-        loss, batch_state = model.forward(
-            bold[start:stop],
-            img_mask=mask[start:stop],
-            visible_mask=visible_mask[start:stop],
-            mask_ratio=None,
-            pred_edge_pad=pred_edge_pad,
-        )
-        state["loss"].append(loss)
-        for k in keys:
-            state[k].append(batch_state[k])
+        bold_ = bold[start:stop]
+        mask_ = mask[start:stop]
 
-    state["loss"] = torch.stack(state["loss"]).mean()
-    for k in keys:
-        v = torch.cat(state[k])
-        if num_samples:
-            v = rearrange(v, "(b s n) c t h w -> b s c n t h w", s=num_samples, n=num_clips)
+        if mask_fn is not None:
+            visible_mask_ = torch.zeros_like(mask_)
+            for sample_idx in range(len(bold_)):
+                visible_mask_[sample_idx] = mask_fn(mask_[sample_idx, 0, 0], mask_ratio=mask_ratio)
         else:
-            v = rearrange(v, "(b n) c t h w -> b c n t h w", n=num_clips)
-        state[k] = v
-
-    if num_samples and num_samples > 1:
-        pred_images: Tensor = state["pred_images"]
-        pred_mask: Tensor = state["pred_mask"]
-        pred_images = pred_images * pred_mask
-        pred_count = pred_mask.sum(dim=1, keepdim=True)
-        pred_mean = pred_images.sum(dim=1, keepdim=True) / pred_count.clip(min=1)
-        pred_std = (((pred_images - pred_mean) ** 2).sum(dim=1) / pred_count.clip(min=1)).sqrt()
-        state["pred_mean"] = pred_mean
-        state["pred_std"] = pred_std
-
-    return state
-
-
-def forward_embedding(
-    encoder: models_mae.MaskedEncoder,
-    bold: Tensor,
-    mask: Tensor,
-) -> EmbeddingOutput:
-    num_frames = encoder.patchify.img_size[0]
-
-    # pad/truncate and unfold into non-overlapping sliding windows
-    bold, mask, num_clips = pad_unfold(bold, mask, num_frames=num_frames)
-
-    cls_embeds, reg_embeds, patch_embeds = encoder.forward_embedding(bold, mask)
-
-    # unflatten batch and clip dimensions
-    if cls_embeds is not None:
-        cls_embeds = rearrange(cls_embeds, "(b n) l d -> b n l d", n=num_clips)
-    if reg_embeds is not None:
-        reg_embeds = rearrange(reg_embeds, "(b n) l d -> b n l d", n=num_clips)
-    patch_embeds = rearrange(patch_embeds, "(b n) l d -> b n l d", n=num_clips)
-
-    return EmbeddingOutput(cls_embeds, reg_embeds, patch_embeds)
-
-
-def unpack_batch(
-    batch: dict[str, Tensor], device: torch.device | None = None
-) -> tuple[Tensor, Tensor]:
-    bold = batch["bold"]
-    mask = batch["mask"]
-    if device is not None:
-        bold = bold.to(device)
-        mask = mask.to(device)
-    # normalize shapes to [B, C, T, H, W]
-    if bold.ndim == 4:
-        bold = bold[None]
-    if mask.ndim == 2:
-        mask = mask[None, None, None, :, :]
-    elif mask.ndim == 3:
-        mask = mask[:, None, None, :, :]
-    mask = mask.expand_as(bold)
-    return bold, mask
+            visible_mask_ = None
+        yield bold_, mask_, visible_mask_
 
 
 def pad_unfold(

@@ -2,6 +2,7 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/MedARC-AI/CortexMAE/blob/main/notebooks/quickstart.ipynb)
 [![Preprint](https://img.shields.io/badge/arXiv-2510.13768-green?logo=bookstack&logoColor=white)](https://arxiv.org/abs/2510.13768)
+[![Discord](https://dcbadge.limes.pink/api/server/https://discord.gg/tVR4TWnRM9?style=flat)](https://discord.gg/tVR4TWnRM9)
 [![Code License](https://img.shields.io/badge/Code_License-Apache_2.0-blue.svg)](LICENSE)
 [![Model License](https://img.shields.io/badge/Model_License-CC_BY--NC_4.0-lightgrey)](https://creativecommons.org/licenses/by-nc/4.0/deed.en)
 
@@ -128,6 +129,10 @@ from brainmarks.models.cortex_mae_wrapper import list_variants
 
 print(list_variants("cortex_mae_flat"))
 ```
+
+## Support
+
+For help with any issues, reach out to us on [MedARC Discord](https://discord.gg/tVR4TWnRM9) in the `#neuro-fm` channel.
 
 ## License
 

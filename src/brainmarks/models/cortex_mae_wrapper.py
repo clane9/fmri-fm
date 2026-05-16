@@ -50,9 +50,9 @@ def cortex_mae(
     keep_blocks: int | None = None,
 ) -> tuple[Transform, CortexMAEWrapper]:
     if ckpt_path is not None:
-        model = CortexMAE.from_checkpoint(ckpt_path)
+        model = CortexMAE.from_checkpoint(ckpt_path, device="cpu")
     else:
-        model = CortexMAE.from_pretrained(model_name)
+        model = CortexMAE.from_pretrained(model_name, device="cpu")
 
     input_space = model.args.input_space
     transform = model.transform

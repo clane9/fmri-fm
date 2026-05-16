@@ -11,6 +11,11 @@ _version.py
 # IDE
 .vscode/
 
+# Agents
+.claude/
+.codex/
+CLAUDE.md
+
 # Virtual environment
 .venv/
 .python-version
@@ -35,3 +40,6 @@ experiments/**/data
 .scratch
 tmp
 .tmp*
+
+# Misc
+.DS_Store

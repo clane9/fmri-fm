@@ -143,8 +143,6 @@ def main(args: DictConfig):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
         model_without_ddp = model.module
 
-    # todo: compile?
-
     # optimizer
     total_batch_size = args.batch_size * args.accum_iter * world_size
     print(
@@ -283,7 +281,6 @@ def create_data_loaders(args: DictConfig):
 
     # masking generator
     # generate masks during collate, following capi
-    # TODO: why do we need to do this again?
     if args.masking:
         # decouple mask patch size from model patch size, pixio style
         mask_patch_size = args.get("mask_patch_size") or args.patch_size

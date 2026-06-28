@@ -150,7 +150,9 @@ class CortexMAE:
     @staticmethod
     def from_pretrained(model_name: str, device: str | None = None) -> "CortexMAE":
         ckpt_path = CORTEX_MAE_MODEL_REGISTRY[model_name]
-        ckpt_path = f"{HF_PREFIX}/{ckpt_path}"
+        ckpt_path = f"hf://{HF_PREFIX}/{ckpt_path}"
+        # get the tracking file too :)
+        hf_hub_download(repo_id=HF_PREFIX, filename="config.json")
         return CortexMAE.from_checkpoint(ckpt_path, device=device)
 
     def set_device(self, device: str | torch.device | None = None) -> "CortexMAE":
@@ -684,7 +686,7 @@ def resample_to_tr(
     return x
 
 
-HF_PREFIX = "hf://medarc/CortexMAE"
+HF_PREFIX = "medarc/CortexMAE"
 
 
 CORTEX_MAE_MODEL_REGISTRY = {

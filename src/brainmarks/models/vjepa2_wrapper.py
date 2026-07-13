@@ -32,7 +32,7 @@ class Vjepa2Wrapper(nn.Module):
 
         # pad if too short
         if T < self.num_frames:
-            mean = bold.mean(dim=1, keepdim=True).expand(-1, self.num_frames - 1, -1, -1, -1)
+            mean = bold.mean(dim=1, keepdim=True).expand(-1, self.num_frames - T, -1, -1, -1)
             bold = torch.cat([bold, mean], dim=1)
             T = self.num_frames
 
@@ -52,11 +52,7 @@ class Vjepa2Wrapper(nn.Module):
 
 
 class Vjepa2Transform:
-    def __init__(
-        self,
-        cmap_name: str = "fc",
-    ):
-        super().__init__()
+    def __init__(self, cmap_name: str = "none"):
         self.cmap_name = cmap_name
 
         self.norm = "frame"
@@ -146,10 +142,7 @@ def resample_to_tr(
 
 
 @register_model
-def vjepa2(
-    *,
-    cmap_name: str = "none",
-) -> tuple[Vjepa2Transform, Vjepa2Wrapper]:
+def vjepa2(*, cmap_name: str = "none") -> tuple[Vjepa2Transform, Vjepa2Wrapper]:
     transform = Vjepa2Transform(cmap_name=cmap_name)
     model = Vjepa2Wrapper()
     return transform, model

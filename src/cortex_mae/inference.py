@@ -618,6 +618,7 @@ def get_reader(space: str = "flat") -> Reader:
         "schaefer400_tians3": SchaeferTianReader,
         "a424": A424Reader,
         "schaefer1000": partial(SchaeferReader, num_rois=1000),
+        "mae_st": FlatReader,
     }[space]
     reader = reader_cls()
     return reader
@@ -637,6 +638,11 @@ class Transform:
         self.target_tr = 1.0
         self.no_coord_normalize = no_coord_normalize
         self.unmask = transforms.get_unmask(space)
+
+        if space == "mae_st":
+            self.preprocess = transforms.MaeStPreprocess()
+        else:
+            self.preprocess = None
 
     def __call__(self, sample: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         bold = sample["bold"]
@@ -666,6 +672,11 @@ class Transform:
         # unmask masked input
         sample["bold"] = bold
         sample = self.unmask(sample)
+
+        # extra preprocessing
+        if self.preprocess is not None:
+            sample = self.preprocess(sample)
+
         return sample
 
 

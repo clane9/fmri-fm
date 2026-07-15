@@ -41,6 +41,11 @@ class CortexMAEWrapper(nn.Module):
         return Embeddings(cls_embeds, reg_embeds, patch_embeds)
 
 
+INPUT_SPACE_LUT = {
+    "mae_st": "flat",
+}
+
+
 @register_model
 def cortex_mae(
     *,
@@ -64,7 +69,7 @@ def cortex_mae(
     if keep_blocks is not None:
         encoder.blocks = encoder.blocks[:keep_blocks]
     model = CortexMAEWrapper(encoder)
-    model.__space__ = input_space
+    model.__space__ = INPUT_SPACE_LUT.get(input_space, input_space)
     return transform, model
 
 

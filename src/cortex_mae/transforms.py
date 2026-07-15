@@ -433,8 +433,8 @@ class GrayJitter:
 
 
 class MaeStPreprocess:
-    def __init__(self, clip_vmax: float = 3.0):
-        self.clip_vmax = clip_vmax
+    def __init__(self):
+        self.clip_vmax = 3.0
         self.img_size = 224
         self.mean = torch.tensor([0.45, 0.45, 0.45])
         self.std = torch.tensor([0.225, 0.225, 0.225])
@@ -468,7 +468,7 @@ class MaeStPreprocess:
 
     def __repr__(self):
         c = self.__class__.__name__
-        return f"{c}(clip_vmax={self.clip_vmax})"
+        return f"{c}()"
 
 
 def make_transform(

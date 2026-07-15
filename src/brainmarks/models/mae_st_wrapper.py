@@ -1,12 +1,8 @@
-from pathlib import Path
-from urllib.request import urlretrieve
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms.v2.functional as TF
 from einops import rearrange
-from platformdirs import user_cache_dir
 
 from brainmarks.models.base import Embeddings
 from brainmarks.models.registry import register_model
@@ -120,76 +116,18 @@ def resample_to_tr(
     return x
 
 
-def fetch_mae_st_checkpoint() -> Path:
-    cache_dir = Path(user_cache_dir("brainmarks"))
-    cached_file = cache_dir / "mae_st" / "mae_pretrain_vit_large_k400.pth"
-    if not cached_file.exists():
-        cached_file.parent.mkdir(exist_ok=True, parents=True)
-        urlretrieve(
-            "https://dl.fbaipublicfiles.com/video-mae/pretrain/mae_pretrain_vit_large_k400.pth",
-            cached_file,
-        )
-    return cached_file
-
-
-def convert_mae_st_checkpoint(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    out_dict = {}
-    swaps = [
-        ("cls_token", "cls_token"),
-        ("pos_embed_spatial", "pos_embed.weight_spatial"),
-        ("pos_embed_temporal", "pos_embed.weight_temporal"),
-        ("pos_embed_class", "cls_token_pos"),
-        ("patch_embed.proj", "patch_embed"),
-    ]
-
-    drops = [
-        "decoder_pos_embed",
-        "mask_token",
-        "pred_head",
-        "decoder_embed",
-    ]
-
-    for name, p in state_dict.items():
-        if any(name.startswith(old) for old in drops):
-            continue
-
-        for old, new in swaps:
-            if name.startswith(old):
-                name = name.replace(old, new)
-                break
-
-        if name == "patch_embed.weight":
-            out_dict[name] = p.flatten(1)
-        elif name == "pos_embed.weight_temporal":
-            out_dict[name] = p.transpose(0, 1)
-        else:
-            out_dict[name] = p
-    return out_dict
-
-
 @register_model
-def mae_st_vit_large():
-    # verified that our ViT impl produces identical output to the original MAE-st impl.
-    encoder = models_mae.MaskedViT(
+def mae_st_vit_large(pretrained: bool = True):
+    model = models_mae.mae_vit_large_fb(
         img_size=224,
         in_chans=3,
         patch_size=16,
         num_frames=16,
         t_patch_size=2,
-        depth=24,
-        embed_dim=1024,
-        num_heads=16,
-        mlp_ratio=4,
-        class_token=True,
-        pos_embed="sep",
+        t_pred_stride=2,
+        pretrained=pretrained,
     )
 
-    ckpt_path = fetch_mae_st_checkpoint()
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
-    model_state = ckpt["model_state"]
-    model_state = convert_mae_st_checkpoint(model_state)
-    encoder.load_state_dict(model_state)
-
-    model = MaeStWrapper(encoder)
+    model = MaeStWrapper(model.encoder)
     transform = MaeStTransform()
     return transform, model

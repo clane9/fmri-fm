@@ -179,7 +179,6 @@ def _imshow(
     vmax: float = 3.0,
 ):
     image = image.squeeze()
-    H, W = image.shape
     if mask is not None:
         image = np.where(mask.squeeze(), image, np.nan)
     plt.imshow(image, cmap=FC_CMAP, vmin=vmin, vmax=vmax, interpolation="none")

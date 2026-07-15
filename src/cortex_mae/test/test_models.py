@@ -141,6 +141,25 @@ def test_mae_vit_pos_embed_3d(pos_embed: str):
     assert not torch.isnan(loss)
 
 
+def test_mae_vit_context_cls():
+    img_size = (32, 64)
+    patch_size = (8, 8)
+    in_chans = 3
+    model = models_mae.MaskedAutoencoderViT(
+        img_size=img_size,
+        patch_size=patch_size,
+        in_chans=in_chans,
+        context_cls=True,
+        **_CFGS["tiny"],
+    )
+    # the decoder cls token comes from the encoder, so there is no learned token
+    assert model.decoder.cls_token is None
+
+    x = torch.randn(2, in_chans, *img_size)
+    loss, state = model.forward(x, mask_ratio=0.75)
+    assert not torch.isnan(loss)
+
+
 @pytest.mark.parametrize("decoding", ["attn", "cross", "crossreg"])
 def test_mae_vit_decoding(decoding: str):
     img_size = (32, 64)

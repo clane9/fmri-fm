@@ -14,7 +14,9 @@ MaskedAutoEncoderViT: full MAE model supporting image and video
 """
 
 import importlib.resources
+from pathlib import Path
 from typing import Literal, Type
+from urllib.request import urlretrieve
 
 import numpy as np
 import torch
@@ -22,6 +24,7 @@ import torch.nn as nn
 from torch import Tensor
 from huggingface_hub import PyTorchModelHubMixin
 from jaxtyping import Float, Int
+from platformdirs import user_cache_dir
 from timm.layers import to_2tuple, to_ntuple
 
 from .modules import (
@@ -271,6 +274,7 @@ class MaskedDecoder(nn.Module):
         proj_bias: bool = True,
         mlp_ratio: int | float = 4,
         class_token: bool = True,
+        context_cls: bool = False,
         no_embed_class: bool = False,
         final_norm: bool = True,
         no_context_proj: bool = False,
@@ -282,11 +286,12 @@ class MaskedDecoder(nn.Module):
 
         self.cross_decode = cross_decode
         self.has_class_token = class_token
+        self.context_cls = context_cls
         self.no_embed_class = no_embed_class
 
         self.cls_token = nn.Parameter(torch.empty(1, 1, embed_dim)) if class_token else None
-        if not no_embed_class:
-            self.cls_token_pos = nn.Parameter(torch.empty(1, 1, embed_dim)) if class_token else None
+        if (class_token or context_cls) and not no_embed_class:
+            self.cls_token_pos = nn.Parameter(torch.empty(1, 1, embed_dim))
         else:
             self.cls_token_pos = None
 
@@ -323,8 +328,8 @@ class MaskedDecoder(nn.Module):
 
     def extra_repr(self):
         return (
-            f"cross_decode={self.cross_decode}, "
-            f"class_token={self.has_class_token}, no_embed_class={self.no_embed_class}"
+            f"cross_decode={self.cross_decode}, class_token={self.has_class_token}, "
+            f"context_cls={self.context_cls}, no_embed_class={self.no_embed_class}"
         )
 
     def reset_parameters(self) -> None:
@@ -336,20 +341,21 @@ class MaskedDecoder(nn.Module):
             nn.init.trunc_normal_(self.cls_token_pos, std=0.02)
         nn.init.trunc_normal_(self.mask_token, std=0.02)
 
-    def cat_tokens(self, x: Tensor) -> Tensor:
+    def cat_tokens(self, x: Tensor, cls_embeds: Tensor | None = None) -> Tensor:
+        assert (cls_embeds is not None) == self.context_cls
         B, _, _ = x.shape
         to_cat = []
-        if self.has_class_token:
-            cls_token = self.cls_token
+        if self.has_class_token or self.context_cls:
+            cls_token = cls_embeds if self.context_cls else self.cls_token.expand(B, -1, -1)
             if not self.no_embed_class:
                 cls_token = cls_token + self.cls_token_pos
-            to_cat.append(cls_token.expand(B, -1, -1))
+            to_cat.append(cls_token)
         if to_cat:
             x = torch.cat(to_cat + [x], dim=1)
         return x
 
     def chunk_tokens(self, x: Tensor) -> tuple[Tensor | None, Tensor]:
-        cls_offset = int(self.has_class_token)
+        cls_offset = int(self.has_class_token or self.context_cls)
         cls = x[:, :cls_offset] if self.has_class_token else None
         patch = x[:, cls_offset:, :]
         return cls, patch
@@ -359,6 +365,7 @@ class MaskedDecoder(nn.Module):
         embeds: Float[Tensor, "B L D"],
         embed_ids: Int[Tensor, "B L"] | None = None,
         pred_ids: Int[Tensor, "B Q"] | None = None,
+        cls_embeds: Float[Tensor, "B 1 D"] | None = None,
     ) -> Float[Tensor, "B Q P"]:
         """
         embeds: input embeddings, can be patch or register embeddings, which will be fed
@@ -367,6 +374,7 @@ class MaskedDecoder(nn.Module):
         embed_ids: optional patch indices for input embeddings. If not provided, no
             position will be added to the embeddings. Not used for cross decoding.
         pred_ids: patch indices of query mask positions. If None, decode *all* patches.
+        cls_embeds: encoder cls embeddings to override cls_token
 
         returns:
         - pred [B, Q, P] where Q is the number of prediction patches and P is the output
@@ -379,6 +387,8 @@ class MaskedDecoder(nn.Module):
         mask = self.pos_embed(mask, pos_ids=pred_ids)
 
         embeds = self.proj(embeds)
+        if cls_embeds is not None:
+            cls_embeds = self.proj(cls_embeds)
 
         if self.cross_decode:
             # cross attention decoding (crossmae)
@@ -395,7 +405,7 @@ class MaskedDecoder(nn.Module):
             context = None
             pred_offset = L
 
-        x = self.cat_tokens(x)
+        x = self.cat_tokens(x, cls_embeds=cls_embeds)
         for block in self.blocks:
             x = block(x, context=context)
         _, x = self.chunk_tokens(x)
@@ -424,6 +434,7 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
         proj_bias: bool = True,
         mlp_ratio: int | float = 4,
         class_token: bool = True,
+        context_cls: bool = False,
         reg_tokens: int = 0,
         no_embed_class: bool = False,
         drop_path_rate: float = 0.0,
@@ -433,6 +444,7 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
         no_decode_pos: bool = False,
         head_init_scale: float | None = None,
         pos_embed: Literal["abs", "sep", "sincos"] = "abs",
+        decoder_pos_embed: Literal["abs", "sep", "sincos"] | None = None,
         decoding: Literal["attn", "cross", "crossreg"] = "attn",
         target_norm: Literal["none", "patch", "pca"] | None = None,
         pca_norm_nc: int = 2,
@@ -506,7 +518,15 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
         decoder_embed_dim = decoder_embed_dim or embed_dim
         decoder_num_heads = decoder_num_heads or num_heads
 
-        decoder_pos_embed = pos_embed_layer(decoder_embed_dim, self.pred_patchify.grid_size)
+        if decoder_pos_embed is None:
+            decoder_pos_embed_layer = pos_embed_layer
+        elif decoder_pos_embed == "sincos":
+            decoder_pos_embed_layer = {2: SinCosPosEmbed2D, 3: SinCosPosEmbed3D}[ndim]
+        else:
+            decoder_pos_embed_layer = {"abs": AbsolutePosEmbed, "sep": SeparablePosEmbed}[
+                decoder_pos_embed
+            ]
+        decoder_pos_embed = decoder_pos_embed_layer(decoder_embed_dim, self.pred_patchify.grid_size)
         # we might want to try tying the weights of the prediction head to the patch
         # embedding at some point.
         decoder_head = nn.Linear(decoder_embed_dim, self.pred_patchify.patch_dim)
@@ -523,7 +543,8 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
             qkv_bias=qkv_bias,
             proj_bias=proj_bias,
             mlp_ratio=mlp_ratio,
-            class_token=class_token and not cross_decode,  # cls not active for cross-decode
+            class_token=class_token and not (cross_decode or context_cls),
+            context_cls=context_cls,
             no_embed_class=no_embed_class,
             no_context_proj=cross_decode,  # don't project embeds for cross-decode
         )
@@ -663,6 +684,7 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
         self,
         patch_embeds: Float[Tensor, "B L D"],
         reg_embeds: Float[Tensor, "B R D"] | None,
+        cls_embeds: Float[Tensor, "B 1 D"] | None,
         visible_ids: Int[Tensor, "B L"],
         pred_ids: Int[Tensor, "B Q"] | None,
     ) -> Float[Tensor, "B Q P"]:
@@ -675,7 +697,12 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
             embed_ids = visible_ids
         else:
             embed_ids = None
-        preds = self.decoder.forward(embeds, embed_ids=embed_ids, pred_ids=pred_ids)
+        preds = self.decoder.forward(
+            embeds,
+            embed_ids=embed_ids,
+            pred_ids=pred_ids,
+            cls_embeds=cls_embeds if self.decoder.context_cls else None,
+        )
         return preds
 
     def forward_loss(
@@ -754,7 +781,7 @@ class MaskedAutoencoderViT(nn.Module, PyTorchModelHubMixin):
             full_decoding=full_decoding,
         )
 
-        preds = self.forward_decoder(patch_embeds, reg_embeds, visible_ids, pred_ids)
+        preds = self.forward_decoder(patch_embeds, reg_embeds, cls_embeds, visible_ids, pred_ids)
 
         loss = self.forward_loss(preds, targets_patches, pred_mask_patches, pred_ids)
 
@@ -955,6 +982,96 @@ def mae_vit_small(**kwargs):
 def mae_vit_base(**kwargs):
     model_args = dict(embed_dim=768, depth=12, num_heads=12)
     return _create_mae_vit(**model_args, **kwargs)
+
+
+def mae_vit_large(**kwargs):
+    model_args = dict(embed_dim=1024, depth=24, num_heads=16)
+    return _create_mae_vit(**model_args, **kwargs)
+
+
+def mae_vit_large_fb(pretrained: bool = False, **kwargs):
+    # there are some nuances with the official mae_st code vs the released checkpoint.
+    # the checkpoint was trained with slowfast (slowfast/models/masked.py) which differs
+    # in a few ways:
+    #   - sep pos embed for encoder and abs for decoder
+    #   - decoder head dim 64 instead of 32
+    #   - no decoder cls token. instead, encoder cls embeddings are passed through.
+    model_args = dict(
+        embed_dim=1024,
+        depth=24,
+        num_heads=16,
+        pos_embed="sep",
+        decoder_pos_embed="abs",
+        decoder_depth=4,
+        decoder_embed_dim=512,
+        decoder_num_heads=8,
+        class_token=True,
+        context_cls=True,
+        target_norm="patch",
+    )
+    model = _create_mae_vit(**model_args, **kwargs)
+    if pretrained:
+        ckpt_path = fetch_mae_st_checkpoint()
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+        model_state = _convert_from_mae_st(ckpt["model_state"])
+        model.load_state_dict(model_state)
+    return model
+
+
+def fetch_mae_st_checkpoint(model_name: str = "mae_pretrain_vit_large_k400") -> Path:
+    url = f"https://dl.fbaipublicfiles.com/video-mae/pretrain/{model_name}.pth"
+    cached_file = Path(user_cache_dir("cortex_mae")) / "mae_st" / f"{model_name}.pth"
+    if not cached_file.exists():
+        cached_file.parent.mkdir(exist_ok=True, parents=True)
+        tmp_file = cached_file.with_suffix(".tmp")
+        urlretrieve(url, tmp_file)
+        tmp_file.rename(cached_file)
+    return cached_file
+
+
+def _convert_from_mae_st(state_dict: dict[str, Tensor]) -> dict[str, Tensor]:
+    out_dict = {}
+    # nb, order matters; first match wins
+    swaps = [
+        ("cls_token", "encoder.cls_token"),
+        ("pos_embed_spatial", "encoder.pos_embed.weight_spatial"),
+        ("pos_embed_temporal", "encoder.pos_embed.weight_temporal"),
+        ("pos_embed_class", "encoder.cls_token_pos"),
+        ("patch_embed.proj", "encoder.patch_embed"),
+        ("blocks", "encoder.blocks"),
+        ("norm", "encoder.norm"),
+        ("decoder_embed", "decoder.proj"),
+        ("decoder_pos_embed", "decoder.pos_embed.weight"),
+        ("mask_token", "decoder.mask_token"),
+        ("pred_head.transforms.0.4", "decoder.norm"),
+        ("pred_head.transforms.0", "decoder.blocks"),
+        ("pred_head.projections.0", "decoder.head"),
+    ]
+
+    for name, p in state_dict.items():
+        for old, new in swaps:
+            if name.startswith(old):
+                name = name.replace(old, new)
+                break
+
+        if name == "encoder.patch_embed.weight":
+            # conv3d [D, C, t, h, w] -> linear [D, C*t*h*w]
+            out_dict[name] = p.flatten(1)
+        elif name == "encoder.pos_embed.weight_temporal":
+            out_dict[name] = p.transpose(0, 1)
+        elif name == "decoder.pos_embed.weight":
+            # split off the cls position
+            out_dict[name] = p[0, 1:, :]
+            out_dict["decoder.cls_token_pos"] = p[:, :1, :]
+        else:
+            out_dict[name] = p
+
+    # the mae-st prediction target is channels last, ours is channels first
+    for name in ["decoder.head.weight", "decoder.head.bias"]:
+        p = out_dict[name]
+        p = p.unflatten(0, (16, 16, 3))
+        out_dict[name] = p.permute(2, 0, 1, *range(3, p.ndim)).flatten(0, 2)
+    return out_dict
 
 
 # Here we create 5 scaled models with the same proportion as vit base

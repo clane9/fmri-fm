@@ -2,6 +2,7 @@ import io
 from typing import Optional
 
 import numpy as np
+import torch
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
@@ -41,9 +42,13 @@ def plot_mask_pred(
     nrow: int = 8,
     vmax: float = 3.0,
 ):
-    # [B, C, H, W] or [B, C, T, H, W]
-    assert target.ndim in {4, 5}, "invalid target shape"
-    T = target.shape[2] if target.ndim == 5 else 1
+    B, C, T, H, W = target.shape
+
+    if C == 3:
+        cmin = target.amin(dim=(0, 2, 3, 4), keepdim=True)
+        cmax = target.amax(dim=(0, 2, 3, 4), keepdim=True)
+        target = torch.clamp((target - cmin) / (cmax - cmin), 0, 1)
+        pred = torch.clamp((pred - cmin) / (cmax - cmin), 0, 1)
 
     target = _prep_images(target, nrow, stride)
     pred = _prep_images(pred, nrow, stride)

@@ -4,6 +4,7 @@ from typing import Literal
 
 import torch
 import torchvision.transforms.v2 as v2
+import torchvision.transforms.v2.functional as TF
 import torchvision.tv_tensors as tvt
 import torch.nn.functional as F
 import nibabel as nib
@@ -431,6 +432,45 @@ class GrayJitter:
         return f"{c}(brightness={self.brightness}, contrast={self.contrast})"
 
 
+class MaeStPreprocess:
+    def __init__(self, clip_vmax: float = 3.0):
+        self.clip_vmax = clip_vmax
+        self.img_size = 224
+        self.mean = torch.tensor([0.45, 0.45, 0.45])
+        self.std = torch.tensor([0.225, 0.225, 0.225])
+
+    def __call__(self, sample):
+        bold = sample["bold"]
+        mask = sample["mask"]
+
+        # gray to rgb
+        bold = bold.transpose(0, 1)  # C T H W -> T C H W
+        bold = torch.clamp((bold + self.clip_vmax) / (2 * self.clip_vmax), 0.0, 1.0)
+        bold = TF.grayscale_to_rgb(bold)  # T C H W
+
+        # rgb normalize
+        bold = (bold - self.mean[:, None, None]) / self.std[:, None, None]
+
+        # resize
+        bold = TF.resize(bold, (self.img_size, self.img_size))
+
+        bold = bold.transpose(0, 1)  # T C H W -> C T H W
+
+        mask = TF.resize(
+            mask[None, :, :],
+            (self.img_size, self.img_size),
+            interpolation=v2.InterpolationMode.NEAREST,
+        ).squeeze(0)
+
+        sample["bold"] = bold
+        sample["mask"] = mask
+        return sample
+
+    def __repr__(self):
+        c = self.__class__.__name__
+        return f"{c}(clip_vmax={self.clip_vmax})"
+
+
 def make_transform(
     space: str = "flat",
     num_frames: int = 16,
@@ -468,6 +508,9 @@ def make_transform(
     if gray_jitter and gray_jitter > 0:
         transforms.append(GrayJitter(gray_jitter, gray_jitter))
 
+    if space == "mae_st":
+        transforms.append(MaeStPreprocess())
+
     return v2.Compose(transforms)
 
 
@@ -486,6 +529,7 @@ def get_unmask(space: str = "flat"):
         "schaefer400_tians3": Schaefer400TianS3Unmask,
         "a424": A424Unmask,
         "schaefer1000": Schaefer1000Unmask,
+        "mae_st": FlatUnmask,
     }[space]
     unmask = unmask_cls()
     return unmask

@@ -89,6 +89,9 @@ def main(args: DictConfig):
     elif args.input_space == "schaefer1000":
         args.img_size = (1000, 1)
         args.patch_size = 1
+    elif args.input_space == "mae_st":
+        args.img_size = (224, 224)
+        args.in_chans = 3
     else:
         raise ValueError(f"input space {args.input_space} not implemented")
 

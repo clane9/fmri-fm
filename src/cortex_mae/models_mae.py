@@ -997,21 +997,40 @@ def mae_vit_large_fb(pretrained: bool = False, **kwargs):
     #   - decoder head dim 64 instead of 32
     #   - no decoder cls token. instead, encoder cls embeddings are passed through.
     model_args = dict(
-        embed_dim=1024,
+        img_size=(224, 224),
+        patch_size=16,
+        in_chans=3,
+        num_frames=16,
+        t_patch_size=2,
         depth=24,
+        embed_dim=1024,
         num_heads=16,
-        pos_embed="sep",
-        decoder_pos_embed="abs",
         decoder_depth=4,
         decoder_embed_dim=512,
         decoder_num_heads=8,
+        mlp_ratio=4,
         class_token=True,
         context_cls=True,
+        reg_tokens=0,
+        no_embed_class=False,
+        t_pred_stride=2,
+        no_decode_pos=False,
+        pos_embed="sep",
+        decoder_pos_embed="abs",
+        decoding="attn",
         target_norm="patch",
     )
+
+    keys = list(kwargs)
+    for k in keys:
+        v = kwargs[k]
+        if k in model_args and v != model_args[k]:
+            print(f"overwrite {k}={v}")
+        kwargs.pop(k)
     model = _create_mae_vit(**model_args, **kwargs)
     if pretrained:
         ckpt_path = fetch_mae_st_checkpoint()
+        print(f"loading pretrained checkpoint: {ckpt_path}")
         ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
         model_state = _convert_from_mae_st(ckpt["model_state"])
         model.load_state_dict(model_state)

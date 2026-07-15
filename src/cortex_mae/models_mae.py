@@ -1023,10 +1023,10 @@ def mae_vit_large_fb(pretrained: bool = False, **kwargs):
 
     keys = list(kwargs)
     for k in keys:
-        v = kwargs[k]
-        if k in model_args and v != model_args[k]:
-            print(f"overwrite {k}={v}")
-        kwargs.pop(k)
+        if k in model_args:
+            if kwargs[k] != model_args[k]:
+                print(f"overwrite {k}={model_args[k]}")
+            kwargs.pop(k)
     model = _create_mae_vit(**model_args, **kwargs)
     if pretrained:
         ckpt_path = fetch_mae_st_checkpoint()

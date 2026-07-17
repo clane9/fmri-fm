@@ -251,9 +251,13 @@ def is_main_process():
     return get_rank() == 0
 
 
-def save_on_master(*args, **kwargs):
+def save_on_master(ckpt, path):
     if is_main_process():
-        torch.save(*args, **kwargs)
+        # atomic save in case we are interrupted
+        tmp_path = Path(path)
+        tmp_path = tmp_path.parent / f".tmp-{tmp_path.name}"
+        torch.save(ckpt, tmp_path)
+        tmp_path.rename(path)
 
 
 def init_distributed_mode(args):
